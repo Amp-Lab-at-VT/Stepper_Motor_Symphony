@@ -1,348 +1,152 @@
 import org.jfugue.midi.MidiFileManager;
 import org.jfugue.pattern.Pattern;
 import org.jfugue.pattern.Token;
+import org.jfugue.theory.Note;
 
 import javax.sound.midi.InvalidMidiDataException;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Parses MIDI data to create a list of notes contained in the file
  *
  * @author Dylan Green
- * @created 2022.07.03
+ * @version 2023.01.13
  */
 public class Parser {
 
-    private static final boolean DEBUG = true;
-    private static final char DATA_SEPARATOR = '/';
+    private static final int JFUGUE_BEATS_PER_MEASURE = 4;
+    private static final int MINUTES_TO_HUNDREDTHS_OF_SECOND = 6000;
 
-    // Used to convert note names to their corresponding frequency
-    private Frequencies frequencies;
+    // The name of the midi file currently being read
+    private String inputFileName = null;
 
-    // The MIDI file
-    private String[] tokens;
+    // This Pattern object contains the midi file's raw data
+    private Pattern midiPattern;
 
-    // This keeps track of the start time of the current note being processed
-    // Needed because some notes have start times set implicitly through the
-    // duration of previous notes and rests
-    private double currentTrackTime;
+    // A counter to store the start time of the current note being processed, in measures since the beginning of the
+    // piece including a fraction of the current measure
+    private double currentNoteStartTime = 0.0;
 
-    // These hold the tempo and BPM of the current MIDI file
-    private static int tempo;
-    private static int beatsPerMeasure;
+    // The music's current tempo, default is 120 beats per minute
+    private int tempo = 120;
 
-    // A set of states used by the note parser FSM
-    private enum States {PITCH, DURATION, DONE}
-
-    /**
-     * Constructs a new MIDI file parser
-     *
-     * @param filename The name or path of the MIDI file to read from
-     */
-    public Parser(String filename) {
-
-        // Parse the MIDI data
-        try {
-            tokens = MidiFileManager.loadPatternFromMidi(new File(filename)).toString().split("\\s+");
-        } catch (InvalidMidiDataException e) {
-            System.err.println(filename + " could not be read from. The file may be corrupted.");
-        } catch (IOException e) {
-            System.err.println(filename + " could not be found.");
-        }
-
-        // Initialize the frequency converter
-        frequencies = new Frequencies();
+    public void readFile(String fileName) throws InvalidMidiDataException, IOException {
+        midiPattern = MidiFileManager.loadPatternFromMidi(new File(fileName));
+        System.out.println(midiPattern.toString());
+        inputFileName = fileName;
     }
 
-    public ArrayList<Note> parseMusicData() {
+    /**
+     * Parses the midi file whose data is stored in the tokens list and returns the data
+     * as a list of notes that can be played on stepper motors
+     * @return An arraylist of notes with start times and durations in hundredths of a second
+     */
+    public ArrayList<SimpleNote> parseMidi() {
+        ArrayList<SimpleNote> notes = new ArrayList<>();
+        List<Token> tokens = midiPattern.getTokens();
 
-        // This arraylist will store all the notes that get parsed from the music data
-        ArrayList<Note> notes = new ArrayList<Note>();
+        // Reload the default values for these variables
+        currentNoteStartTime = 0.0;
+        tempo = 120;
 
-        // Reset the track timer to 0, the start of the track
-        currentTrackTime = 0.0;
-
-        for (String token : tokens) {
-
-            switch (getType(token)) {
-                case NOTE -> parseNote(token, notes);
-                case TRACK_TIME_BOOKMARK -> currentTrackTime = parseTrackTimeBookmark(token);
-                case TEMPO -> parseTempo(token);
-                case TIME_SIGNATURE -> parseTimeSignature(token);
-                case VOICE -> currentTrackTime = 0.0;
+        for (Token t : tokens) {
+            switch (t.getType()) {
+                case NOTE -> parseNote(t, notes);
+                case TRACK_TIME_BOOKMARK -> currentNoteStartTime = parseTrackTimeBookmark(t);
+                case TEMPO -> tempo = parseTempo(t);
+                case VOICE -> currentNoteStartTime = 0.0;
             }
         }
 
         return notes;
     }
 
-    public ArrayList<Note>[] parseMusicTracks() {
-        //ArrayList<ArrayList<Note>> tracks = new ArrayList<ArrayList<Note>>(100);
-        ArrayList<Note>[] tracks = new ArrayList[100];
 
-        // Reset the track timer to 0, the start of the track
-        currentTrackTime = 0.0;
-        int currentTrackIndex = 0;
+    /**
+     * Takes a note/rest token and parses its data. If the token is a note, then the note is added
+     * to the notes arraylist. If the token is a rest, then the method only adds the rest's duration
+     * to the note start time counter.
+     * @param token The note/rest token to parse
+     * @param notes A list of notes that the current token will be added to if it is a note
+     */
+    private void parseNote(Token token, ArrayList<SimpleNote> notes) {
+        String tokenString = token.toString();
 
-        for (String token : tokens) {
-
-            switch (getType(token)) {
-                case NOTE:
-                    parseNote(token, tracks[currentTrackIndex]);
-                    break;
-                case TRACK_TIME_BOOKMARK:
-                    currentTrackTime = parseTrackTimeBookmark(token);
-                    break;
-                case TEMPO:
-                    tempo = 180;//parseTempo(token);
-                    break;
-                case TIME_SIGNATURE:
-                    parseTimeSignature(token);
-                    break;
-                case VOICE:
-                    currentTrackTime = 0.0;
-                    currentTrackIndex = Integer.parseInt(token.substring(1));
-                    //tracks.add(currentTrackIndex, new ArrayList<Note>());
-                    tracks[currentTrackIndex] = new ArrayList<Note>();
-                    break;
-            }
+        // Percussion, which we want to ignore, is enclosed in square brackets
+        if (tokenString.charAt(0) == '[') {
+            return;
         }
 
-        return tracks;
-    }
+        // Extract the note's data
+        Note note = new Note(tokenString);
+        double duration = calculateDuration(tokenString);
+        double frequency = Note.getFrequencyForNote(tokenString);
 
-    private Token.TokenType getType(String token) {
-        char firstChar = token.charAt(0);
+        // If the Note token isn't a rest (i.e. it is an actual note), add it to the notes list
+        if (!note.isRest()) {
 
-        // Notes always start with their pitch letter. JFugue considers rests to be
-        // of the NOTE type as well, so they are included for consistency.
-        if ((firstChar >= 'A' && firstChar <= 'G') || firstChar == 'R') return Token.TokenType.NOTE;
+            // Convert the note start time and duration from number of measures to hundredths of a second
+            // We do this because the microcontroller checks for new notes 100 times per second
+            int startTimeInHundredths = (int) Math.ceil(currentNoteStartTime * JFUGUE_BEATS_PER_MEASURE * (1.0 / tempo) * MINUTES_TO_HUNDREDTHS_OF_SECOND);
+            int durationInHundredths = (int) Math.floor(duration * JFUGUE_BEATS_PER_MEASURE * (1.0 / tempo) * MINUTES_TO_HUNDREDTHS_OF_SECOND) - 1;
 
-        // Track time bookmarks always start with @
-        else if (firstChar == '@') return Token.TokenType.TRACK_TIME_BOOKMARK;
-
-        // Time signatures include "TIME" in the token while tempo tokens are always
-        // a T followed by a number
-        else if (firstChar == 'T') {
-            char secondChar = token.charAt(1);
-            if (secondChar == 'I') return Token.TokenType.TIME_SIGNATURE;
-            else if (Character.isDigit(secondChar)) return Token.TokenType.TEMPO;
+            SimpleNote newNote = new SimpleNote(startTimeInHundredths, frequency, durationInHundredths);
+            notes.add(newNote);
         }
 
-        // Voice tokens always start with a V
-        else if (firstChar == 'V') return Token.TokenType.VOICE;
-
-        // If the token isn't one of these types, then it isn't needed by the program
-        return Token.TokenType.UNKNOWN_TOKEN;
+        // Add the current note's duration to the start time counter, so we know when the next note will start
+        currentNoteStartTime += duration;
     }
 
     /**
-     * Reads note data from the MIDI pattern and converts it into a form usable by the program,
-     * then adds the note to the main note list. Note that the JFugue library does not differentiate
-     * between actual notes and rests since both have the NOTE TokenType.
-     *
-     * @param token The token to parse, which can either be a rest or an actual note
-     * @param notes An arraylist to add the newly parsed note to
+     * Calculates the duration in number of measures for a given JFugue token represented as a string
+     * JFugue provides a Note.getDuration() method, but it produces incorrect results for durations expressed in
+     * scientific notation.
+     * @param str
+     * @return The duration of the note token passed in the parameter as a double in number of measures
+     * @throws NumberFormatException If the duration within the String parameter is not a valid double
      */
-    private void parseNote(String token, ArrayList<Note> notes) {
+    private double calculateDuration(String str) throws NumberFormatException {
+        str = str.toLowerCase();
 
-        // Check if the token is a rest
-        // If it is, then add the rest's duration to the track's current time
-        if (token.charAt(0) == 'R') {
-            currentTrackTime += parseRest(token);
+        // If the string token doesn't contain a '/', then duration is expressed using letters like w, h, q and we can let JFugue handle it
+        if (!str.contains("/")) {
+            return new Note(str).getDuration();
         }
 
-        // Otherwise, it's an actual note
-        else {
-            // The note parser will use an FSM since data length is
-            // variable and unpredictable unlike the other token types
-            States state = States.PITCH;
+        // Split the string token on the '/' so that splitNote[1] contains the duration data
+        String[] splitNote = str.split("/");
 
-            // These StringBuilders will hold the data read from the note token
-            StringBuilder pitchData = new StringBuilder();
-            StringBuilder durationData = new StringBuilder();
-
-            // Iterate over each character in the token
-            for (int n = 0; n < token.length(); n++) {
-                char current = token.charAt(n);
-
-                // if the current char is the data separator, just skip over it
-                if (current == DATA_SEPARATOR) continue;
-
-                // The note parsing FSM
-                switch (state) {
-                    case PITCH:
-
-                        //Ignore percussion tokens
-                        //if (current)
-                        // The pitch data always ends with the octave number
-                        if (Character.isDigit(current)) state = States.DURATION;
-
-                        pitchData.append(current);
-                        break;
-                    case DURATION:
-                        // If we reach attack or decay data, we have finished reading duration data
-                        if (current == 'a' || current == 'd' || current == 'A' || current == 'D') {
-                            state = States.DONE;
-                            continue;
-                        } else {
-                            durationData.append(current);
-                        }
-                        break;
-                    case DONE:
-                        // We have finished reading the current token
-                        break;
-                } // At this point, we now have the pitch and duration data as strings
-            }
-
-            double pitch = frequencies.get(pitchData.toString());
-            double duration;
-
-            // If the duration data is stored as a number, parse it directly
-            if (Character.isDigit(durationData.charAt(0))) {
-                duration = Double.parseDouble(durationData.toString());
-            }
-
-            // Otherwise, it's stored as a letter
-            else {
-                duration = NoteLengths.getLength(durationData.charAt(0));
-
-                if (DEBUG) {
-                    if (durationData.length() > 2) {
-                        System.err.println("Duration data longer than expected");
-                        System.err.println("Duration data: " + durationData.toString());
-                    }
-                    if (durationData.length() > 1 && !Character.isDigit(durationData.charAt(1)) && durationData.charAt(1) != '.') {
-                        System.err.println("Expected numeric character at index 1");
-                        System.err.println("Duration data: " + durationData.toString());
-                    }
-                }
-
-                if (durationData.length() > 1) {
-                    double multiplier = 1.0;
-                    if (durationData.charAt(1) == '.') {
-                        multiplier = 1.5;
-
-                    }
-                    else if (Character.isDigit(durationData.charAt(1))) {
-                        multiplier = Integer.parseInt(durationData.substring(1));
-                    }
-                    duration *= multiplier;
-                }
-
-
-            }
-
-            // Add the new note to the list and add its duration to the track timer
-            Note newNote = new Note(currentTrackTime, pitch, duration);
-            //TODO
-            newNote.setName(pitchData.toString());
-            notes.add(newNote);
-            currentTrackTime += duration;
-        }
-    }
-
-    private double parseRest(String token) {
-        double duration = 0;
-
-        // Find the index of the separator character /
-        int separatorIndex = token.indexOf('/');
-
-        // If the separator character is present, then the rest duration
-        // is stored as a decimal number
-        if (separatorIndex != -1) {
-            duration = Double.parseDouble(token.substring(separatorIndex + 1));
+        // If the duration data is not expressed in scientific notation, then we can let JFugue handle it
+        if (!splitNote[1].contains("e")) {
+            return new Note(str).getDuration();
         }
 
-        // Otherwise, it's stored as a letter and needs to be converted into a number
-        else {
-            //duration = NoteLengths.getLength(token.charAt(1));
-
-            // If the rest is dotted, multiply its duration by 1.5
-            /*if (token.length() >= 3) {
-                if (token.charAt(2) == '.') {
-                    duration *= 1.5;
-                }
-                else if (Character.isDigit(token.charAt(2))) {
-                    duration *= Integer.parseInt(token.substring(2));
-                }
-            }*/
-
-            String[] splitToken = splitBeforeLetter(token);
-            int i = 1;
-            while (splitToken[i] != null) {
-                double currentRestDuration = NoteLengths.getLength(splitToken[i].charAt(0));
-
-                if (splitToken[i].length() > 1) {
-                    if (Character.isDigit(splitToken[i].charAt(1))) {
-                        currentRestDuration *= Integer.parseInt(splitToken[i].substring(1));
-                    }
-                    else if (splitToken[i].charAt(1) == '.') {
-                        currentRestDuration *= 1.5;
-                    }
-                }
-
-                duration += currentRestDuration;
-
-                i++;
-            }
-
-            if (DEBUG) {
-                if (token.length() == 3 && token.charAt(2) != '.' && !Character.isDigit(token.charAt(2))) {
-                    System.err.println("Unexpected character at index 2");
-                    System.err.println("Rest token: " + token);
-                }
-            }
-        }
-
-        return duration;
+        // If the duration data also contains attack/decay information, split it on 'a' so that element 0 only contains the duration number
+        // Otherwise use the duration data as is
+        String durationString = (splitNote[1].contains("a")) ? splitNote[1].split("a")[0] : splitNote[1];
+        return Double.parseDouble(durationString);
     }
 
-    private double parseTrackTimeBookmark(String token) {
-        return Double.parseDouble(token.substring(1));
+    private double parseTrackTimeBookmark(Token token) throws NumberFormatException {
+        String timeBookmark = token.toString().substring(1);
+        return Double.parseDouble(timeBookmark);
     }
 
-    private void parseTempo(String token) {
-        tempo = Integer.parseInt(token.substring(1));
+    private int parseTempo(Token token) throws NumberFormatException {
+        String newTempo = token.toString().substring(1);
+        return Integer.parseInt(newTempo);
     }
 
-    private void parseTimeSignature(String token) {
-        beatsPerMeasure = Integer.parseInt(token.substring(5, 6));
+    private int parseTimeSignature(Token token) throws NumberFormatException {
+        String bpm =  token.toString().substring(5, 6);
+        return Integer.parseInt(bpm);
     }
 
-    public String[] splitBeforeLetter(String string) {
-        String[] returnArray = new String[9]; // 8 possible types of note lengths + the note type
-        StringBuilder builder = new StringBuilder();
-        int arrayIndex = 0;
-
-        for (int i = 0; i < string.length() - 1; i++) {
-            builder.append(string.charAt(i));
-
-            if (Character.isLetter(string.charAt(i + 1))) {
-                returnArray[arrayIndex] = builder.toString();
-                builder.setLength(0); //Reset the StringBuilder
-                arrayIndex++;
-            }
-        }
-
-        builder.append(string.charAt(string.length() - 1));
-        returnArray[arrayIndex] = builder.toString();
-
-
-        return returnArray;
-    }
-
-    public String[] getTokens() {
-        return tokens;
-    }
-
-    public static int getTempo() {
-        return tempo;
-    }
-
-    public static int getBeatsPerMeasure() {
-        return beatsPerMeasure;
+    public String getInputFileName() {
+        return inputFileName;
     }
 }
