@@ -1,47 +1,103 @@
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 
 public class InoWriter {
     
     private final ArrayList<Motor> motors;
     private FileWriter writer = null;
-    private final String inputFileName;
+
+    private String outputPath = "";
 
     private static final String TAB = "    ";
+
+    private static final String fileHeader = """
+                    //Program written by Stepper Motor Symphony
+                    #include "stepper.hpp"
+
+                    #define COMMAND_SIZE 8
+                    #define RECORD_SIZE 8
+                    
+                    void checkForNextNote();
+                    void processCommands();
+                    
+                    """;
+
+    private static final String structs = """
+                    struct command {
+                        uint32_t motorIndex;
+                        uint32_t period;
+                    };
+                    
+                    struct record {
+                        uint32_t time;
+                        uint32_t numCommands;
+                    };
+                    
+                    """;
+
+    private static final String checkForNextNote = """
+                    void checkForNextNote() {
+                        uint32_t newMillis = millis();
+                        if (newMillis - oldMillis >= 10) {
+                            oldMillis = newMillis;
+                            counter++;
+                            if (counter == currentRecord.time && recordIndex < numRecords) {
+                                processCommands();
+                                recordIndex++;
+                                memcpy_P(&currentRecord, &records[recordIndex], RECORD_SIZE);
+                            }
+                        }
+                    }
+                    """;
+    private static final String processCommands = """
+                    void processCommands() {
+                        uint8_t numCommands = currentRecord.numCommands;
+                    
+                        for (int n = 0; n < numCommands; n++) {
+                            memcpy_P(&currentCommand, &commands[commandIndex], COMMAND_SIZE);
+                            uint8_t motorIndex = currentCommand.motorIndex;
+                            uint16_t period = currentCommand.period;
+                            motors[motorIndex].setPeriod(period);
+                            commandIndex++;
+                        }
+                    }
+                    """;
     
-    public InoWriter(ArrayList<Motor> motorList, File outputFile, String inputFileName) {
+    public InoWriter(ArrayList<Motor> motorList, String outputFileName) throws IOException {
         motors = motorList;
-        this.inputFileName = inputFileName;
 
-        try {
-            writer = new FileWriter(outputFile);
+        // Get the file name without the type extension
+        String[] fileNameArray = outputFileName.split("\\.");
+        fileNameArray[fileNameArray.length - 1] = "";
+        String outputFileNameWithoutType = String.join("", fileNameArray);
+
+        // Arduino sketches require the .ino file to be in a parent directory with the same name
+        // If the directory exists, just overwrite the contents;
+        // Otherwise, try to create that directory and throw an IOException if it fails
+        if (!Files.exists(new File(outputFileNameWithoutType).toPath()) && !new File(outputFileNameWithoutType).mkdir()) {
+            throw new IOException();
         }
-        catch (IOException e) {
-            System.err.println(outputFile.getName() + " could not be opened. Application exiting...");
-            e.printStackTrace();
-        }
 
+        // Copy the C++ files to the output directory
+        // TODO: Add support for standalone program execution instead of just in an IDE
+        File stepperCppSrc = new File("src/cpp/stepper.cpp");
+        File stepperCppDest = new File(outputFileNameWithoutType + "/stepper.cpp");
+        File stepperHppSrc = new File("src/cpp/stepper.hpp");
+        File stepperHppDest = new File(outputFileNameWithoutType + "/stepper.hpp");
+        Files.copy(stepperCppSrc.toPath(), stepperCppDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        Files.copy(stepperHppSrc.toPath(), stepperHppDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
+        // Create the file that will hold the output program
+        outputPath = outputFileNameWithoutType + "/" + outputFileName;
+        writer = new FileWriter(outputPath);
     }
     
     public void run() throws IOException {
-
-        //Write the file header
-        writer.write("//Program written by StepperMidi\n");
-        writer.write("//Generated from " + inputFileName + "\n\n");
-        writer.write("#include <AccelStepper.h>\n\n");
-
-        //Write the structs used in the program
-        String structs = "struct command {\n" +
-                TAB + "uint8_t motorIndex;\n" +
-                TAB + "uint16_t frequency;\n" +
-                "};\n\n" +
-                "struct record {\n" +
-                TAB + "uint32_t time;\n" +
-                TAB + "uint8_t numCommands;\n" +
-                "};\n\n";
+        writer.write(fileHeader);
         writer.write(structs);
 
         //Write the music command data
@@ -62,7 +118,7 @@ public class InoWriter {
         }
         writer.write("};\n");
 
-        //Write the command record data
+        //Write the record data
         readFirstCommand = false;
         int numRecords = 0;
         writer.write("const record records[] PROGMEM = {");
@@ -73,7 +129,13 @@ public class InoWriter {
                 }
 
                 int numCommands = commands[n].toString().split("},").length;
-                writer.write("{" + n + ", " + numCommands + "}");
+
+                if (n == 0) {
+                    writer.write("{1, " + numCommands + "}");
+
+                } else {
+                    writer.write("{" + n + ", " + numCommands + "}");
+                }
                 numRecords++;
 
                 readFirstCommand = true;
@@ -82,7 +144,7 @@ public class InoWriter {
         writer.write("};\n\n");
 
         //Global variables
-        String variables = "AccelStepper motors[" + motors.size() + "];\n" +
+        String variables = "Stepper motors[" + motors.size() + "];\n" +
                 "command currentCommand;\n" +
                 "record currentRecord;\n" +
                 "uint32_t oldMillis = 0;\n" +
@@ -93,64 +155,29 @@ public class InoWriter {
         writer.write(variables);
 
         //Setup function
-        int controlPin = 2;
         writer.write("void setup() {\n");
-        for (int n = 0; n < motors.size(); n++) {
-            writer.write(TAB + "motors[" + n + "] = AccelStepper(AccelStepper::DRIVER, " + controlPin + ", 12);\n");
-            controlPin++;
+        for (int controlPin = 0; controlPin < motors.size(); controlPin++) {
+            writer.write(TAB + "motors[" + controlPin + "].setPin(D" + controlPin + ");\n");
         }
         writer.write("\n");
-        for (int n = 0; n < motors.size(); n++) {
-            writer.write(TAB + "motors[" + n + "].setEnablePin(13);\n");
-            writer.write(TAB + "motors[" + n + "].setPinsInverted(false, false, true);\n");
-            writer.write(TAB + "motors[" + n + "].setMinPulseWidth(20);\n");
-            writer.write(TAB + "motors[" + n + "].enableOutputs();\n");
-            writer.write(TAB + "motors[" + n + "].setMaxSpeed(8000);\n");
-            writer.write(TAB + "motors[" + n + "].setSpeed(0);\n\n");
-        }
-        writer.write(TAB + "memcpy_P(&currentRecord, &records[0], 5);\n");
+        writer.write(TAB + "memcpy_P(&currentRecord, &records[0], RECORD_SIZE);\n");
         writer.write("}\n\n");
 
         //Loop function
         writer.write("void loop() {\n");
         writer.write(TAB + "checkForNextNote();\n");
         for (int n = 0; n < motors.size(); n++) {
-            writer.write(TAB + "motors[" + n + "].runSpeed();\n");
+            writer.write(TAB + "motors[" + n + "].run(micros());\n");
         }
         writer.write("}\n\n");
 
-        //checkForNextNote function
-        String checkForNextNote = "void checkForNextNote() {\n" +
-                TAB + "uint32_t newMillis = millis();\n" +
-                TAB + "if (newMillis - oldMillis >= 10) {\n" +
-                TAB + TAB + "oldMillis = newMillis;\n" +
-                TAB + TAB + "counter++;\n\n" +
-                TAB + TAB + "if (counter == currentRecord.time) {\n" +
-                TAB + TAB + TAB + "if (recordIndex < numRecords) {\n" +
-                TAB + TAB + TAB + TAB +"handleCommands();\n" +
-                TAB + TAB + TAB + TAB + "recordIndex++;\n" +
-                TAB + TAB + TAB + TAB + "memcpy_P(&currentRecord, &records[recordIndex], 5);\n" +
-                TAB + TAB + TAB + "}\n" +
-                TAB + TAB + "}\n" +
-                TAB + "}\n" +
-                "}\n\n";
         writer.write(checkForNextNote);
-
-        //handleCommands function
-        String handleCommands = "void handleCommands() {\n" +
-                TAB + "uint8_t numCommands = currentRecord.numCommands;\n\n" +
-                TAB + "for (int n = 0; n < numCommands; n++) {\n" +
-                TAB + TAB + "memcpy_P(&currentCommand, &commands[commandIndex], 3);\n" +
-                TAB + TAB + "uint8_t motorIndex = currentCommand.motorIndex;\n" +
-                TAB + TAB + "uint16_t frequency = currentCommand.frequency;\n" +
-                TAB + TAB + "motors[motorIndex].setSpeed(frequency);\n\n" +
-                TAB + TAB + "commandIndex++;\n" +
-                TAB + "}\n" +
-                "}\n";
-        writer.write(handleCommands);
+        writer.write(processCommands);
 
         writer.flush();
         writer.close();
+        System.out.println("Successfully wrote to " + outputPath);
+
     }
 
     private StringBuilder[] notesToCommands() {
@@ -158,8 +185,8 @@ public class InoWriter {
         //Find the end time of the last note
         int songEndTime = 0;
         for (Motor motor : motors) {
-            Note lastNote = motor.getNotes().get(motor.getNotes().size() - 1);
-            int currentEndTime = lastNote.getStartTime() + lastNote.getDuration();
+            SimpleNote lastSimpleNote = motor.getNotes().get(motor.getNotes().size() - 1);
+            int currentEndTime = lastSimpleNote.startTime() + lastSimpleNote.duration();
 
             if (currentEndTime > songEndTime) {
                 songEndTime = currentEndTime;
@@ -168,14 +195,13 @@ public class InoWriter {
 
         StringBuilder[] commandArray = new StringBuilder[songEndTime + 1];
 
-        int count = 0;
         for (Motor motor : motors) {
-            for (Note current : motor.getNotes()) {
-                int startTime = current.getStartTime();
-                int endTime = startTime + current.getDuration();
+            for (SimpleNote currentSimpleNote : motor.getNotes()) {
 
-                //String startCommand = TAB + TAB + TAB + motor.getName() + ".setSpeed(" + current.getPitch() + ");\n";
-                int pitch = (int) Math.round(current.getPitch());
+                // Set up note parameters
+                int startTime = currentSimpleNote.startTime();
+                int endTime = startTime + currentSimpleNote.duration();
+                int pitch = (int) Math.round(currentSimpleNote.pitch());
                 int stepInterval;
                 if (pitch == 0) {
                     stepInterval = 0;
@@ -183,12 +209,10 @@ public class InoWriter {
                 else {
                     stepInterval = 1000000 / pitch;
                 }
+
                 String startCommand = "{" + motor.getIndex() + ", " + stepInterval + "}";
-                //String endCommand = TAB + TAB + TAB + motor.getName() + ".setSpeed(0);\n";
                 String endCommand = "{" + motor.getIndex() + ", 0}";
 
-                if (count > 1600) return commandArray;
-                //if (motor.getIndex() > 3) continue;
                 //Add the note start command
                 if (commandArray[startTime] == null) {
                     commandArray[startTime] = new StringBuilder(startCommand);
@@ -204,7 +228,6 @@ public class InoWriter {
                 else {
                     commandArray[endTime].append(", ").append(endCommand);
                 }
-                count++;
             }
         }
 

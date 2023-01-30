@@ -4,41 +4,38 @@ public class Motor {
     
     private final int index;
     private final ArrayList<IntPair> inUseTimes;
-    private final ArrayList<Note> notes;
+    private final ArrayList<SimpleNote> notes;
     
     public Motor(int newIndex) {
         index = newIndex;
-        inUseTimes = new ArrayList<IntPair>();
-        notes = new ArrayList<Note>();
+        inUseTimes = new ArrayList<>();
+        notes = new ArrayList<>();
     }
 
     public int getIndex() {
         return index;
     }
 
-    public ArrayList<Note> getNotes() {
+    public ArrayList<SimpleNote> getNotes() {
         return notes;
     }
-    
-    public boolean addNote(Note newNote) {
-        if (isInUse(newNote.getStartTime())) {
-            return false;
-        }
-        else {
-            notes.add(newNote);
-            inUseTimes.add(new IntPair(newNote.getStartTime(), newNote.getStartTime() + newNote.getDuration()));
-            return true;
-        }
+
+    /**
+     * Adds a new note to be played on this motor.
+     * @param newNote The note to be added, which must not conflict with any notes already assigned to this motor.
+     */
+    public void addNote(SimpleNote newNote) {
+        notes.add(newNote);
+        inUseTimes.add(new IntPair(newNote.startTime(), newNote.startTime() + newNote.duration()));
     }
     
     public boolean isInUse(int time) {
-        for (IntPair current : inUseTimes) {
-            if (time >= current.getStartTime() && time < current.getEndTime()) {
-                return true;
-            }
-        }
-        
-        return false;
+        // If no notes have been assigned to the motor yet, just return false
+        if (inUseTimes.isEmpty()) return false;
+
+        // Get the last note assigned to the motor and check if it conflicts with the time parameter
+        IntPair lastNoteTimes = inUseTimes.get(inUseTimes.size() - 1);
+        return time >= lastNoteTimes.startTime() && time < lastNoteTimes.endTime();
     }
 
     /**
@@ -46,22 +43,5 @@ public class Motor {
      * at a certain time. The ints specify the start and end times of a note
      * the motor is playing, in hundredths of a second
      */
-    private class IntPair {
-        
-        private final int startTime;
-        private final int endTime;
-        
-        public IntPair(int newStartTime, int newEndTime) {
-            startTime = newStartTime;
-            endTime = newEndTime;
-        }
-        
-        private int getStartTime() {
-            return startTime;
-        }
-        
-        private int getEndTime() {
-            return endTime;
-        }
-    }
+    private record IntPair(int startTime, int endTime) {}
 }

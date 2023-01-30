@@ -12,17 +12,24 @@ import java.util.Collections;
  */
 public class Main {
   
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
 
-        Parser p = new Parser(args[0]);
-        ArrayList<Note> notes = p.parseMusicData();
-        Collections.sort(notes);
-        ArrayList<Motor> motors = NoteAssigner.assign(notes);
+        CommandPrompt c = new CommandPrompt();
+        try {
+            c.run();
+        } catch (IOException e) {
+            System.err.println("The console could not be read from. Exiting...");
+        }
 
-        // Form the output file name
-        String outputFileName = args[0].split(".")[0];
-        InoWriter writer = new InoWriter(motors, new File(outputFileName), "args[0]");
-        writer.run();
+//        Parser p = new Parser(args[0]);
+//        ArrayList<Note> notes = p.parseMusicData();
+//        Collections.sort(notes);
+//        ArrayList<Motor> motors = NoteAssigner.assign(notes);
+//
+//        // Form the output file name
+//        String outputFileName = args[0].split(".")[0];
+//        InoWriter writer = new InoWriter(motors, new File(outputFileName), "args[0]");
+//        writer.run();
 
     }
 }
