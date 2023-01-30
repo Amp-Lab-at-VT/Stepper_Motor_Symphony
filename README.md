@@ -1,18 +1,3 @@
----
-layout: project_template
-title: Stepper Motor Symphony
-description: An array of stepper motors that plays music
-date: 2022-9-21 11:43:00
-hero_image: /web/img/Stepper_Motor_Symphony/stepper_motor.jpg
-image: /web/img/Stepper_Motor_Symphony/stepper_motor.jpg
-hero_height: is-small
-hero_darken: true
-tags: project
-series: amp_lab_project
-author: Dylan Green
-show_sidebar: false
----
-
 ## Members
 Dylan Green, Computer Engineering Student (2024), dylang@vt.edu
 
