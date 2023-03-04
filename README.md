@@ -5,6 +5,9 @@ Dylan Green, Computer Engineering Student (2024), dylang@vt.edu
 <a class="button is-link" href="https://github.com/Amp-Lab-at-VT/Stepper_Motor_Symphony" >Stepper Motor Symphony</a>
 
 ## Photo
+<img src="motors.jpg" alt="The stepper motors mounted on their speaker box" width="350"/>
+<img src="wiring.jpg" alt="Breadboard wiring for the ESP8266 microcontroller and motor drivers" width="500"/>
+<img src="cover.jpg" alt="A CNC-machined wood cover for the hole in the speaker box" width="500"/>
 
 ## Mentor
 Richard Gibbons
