@@ -35,6 +35,7 @@ public class Parser {
 
     public void readFile(String fileName) throws InvalidMidiDataException, IOException {
         midiPattern = MidiFileManager.loadPatternFromMidi(new File(fileName));
+        //TODO: remove debug line
         System.out.println(midiPattern.toString());
         inputFileName = fileName;
     }
@@ -85,20 +86,20 @@ public class Parser {
         double duration = calculateDuration(tokenString);
         double frequency = Note.getFrequencyForNote(tokenString);
 
-        // If the Note token isn't a rest (i.e. it is an actual note), add it to the notes list
+        // Convert the note start time and duration from number of measures to hundredths of a second
+        // We do this because the microcontroller checks for new notes 100 times per second
+        //int startTimeInHundredths = (int) Math.ceil(currentNoteStartTime * JFUGUE_BEATS_PER_MEASURE * (1.0 / tempo) * MINUTES_TO_HUNDREDTHS_OF_SECOND);
+        int startTimeInHundredths = (int) Math.round(currentNoteStartTime);
+        int durationInHundredths = (int) Math.floor(duration * JFUGUE_BEATS_PER_MEASURE * (1.0 / tempo) * MINUTES_TO_HUNDREDTHS_OF_SECOND) - 1;
+
+        // If the Note token isn't a rest (i.e. it's an actual note), add it to the notes list
         if (!note.isRest()) {
-
-            // Convert the note start time and duration from number of measures to hundredths of a second
-            // We do this because the microcontroller checks for new notes 100 times per second
-            int startTimeInHundredths = (int) Math.ceil(currentNoteStartTime * JFUGUE_BEATS_PER_MEASURE * (1.0 / tempo) * MINUTES_TO_HUNDREDTHS_OF_SECOND);
-            int durationInHundredths = (int) Math.floor(duration * JFUGUE_BEATS_PER_MEASURE * (1.0 / tempo) * MINUTES_TO_HUNDREDTHS_OF_SECOND) - 1;
-
             SimpleNote newNote = new SimpleNote(startTimeInHundredths, frequency, durationInHundredths);
             notes.add(newNote);
         }
 
         // Add the current note's duration to the start time counter, so we know when the next note will start
-        currentNoteStartTime += duration;
+        currentNoteStartTime += duration * JFUGUE_BEATS_PER_MEASURE * (1.0 / tempo) * MINUTES_TO_HUNDREDTHS_OF_SECOND;
     }
 
     /**
