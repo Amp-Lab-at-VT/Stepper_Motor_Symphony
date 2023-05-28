@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ListIterator;
 
 /**
  * Parses MIDI data to create a list of notes contained in the file
@@ -20,18 +21,19 @@ public class Parser {
     private static final int JFUGUE_BEATS_PER_MEASURE = 4;
     private static final int MINUTES_TO_HUNDREDTHS_OF_SECOND = 6000;
 
-    // The name of the midi file currently being read
     private String inputFileName = null;
 
     // This Pattern object contains the midi file's raw data
     private Pattern midiPattern;
 
+    private ArrayList<PiecewiseFuncEntry> tempoFunction;
+
     // A counter to store the start time of the current note being processed, in measures since the beginning of the
     // piece including a fraction of the current measure
+    private double currentMeasure = 0.0;
     private double currentNoteStartTime = 0.0;
 
-    // The music's current tempo, default is 120 beats per minute
-    private int tempo = 120;
+
 
     public void readFile(String fileName) throws InvalidMidiDataException, IOException {
         midiPattern = MidiFileManager.loadPatternFromMidi(new File(fileName));
@@ -49,20 +51,48 @@ public class Parser {
         ArrayList<SimpleNote> notes = new ArrayList<>();
         List<Token> tokens = midiPattern.getTokens();
 
+        setupTempoFunction(tokens);
+
         // Reload the default values for these variables
+        currentMeasure = 0.0;
         currentNoteStartTime = 0.0;
-        tempo = 120;
 
         for (Token t : tokens) {
             switch (t.getType()) {
                 case NOTE -> parseNote(t, notes);
-                case TRACK_TIME_BOOKMARK -> currentNoteStartTime = parseTrackTimeBookmark(t);
-                case TEMPO -> tempo = parseTempo(t);
-                case VOICE -> currentNoteStartTime = 0.0;
+                case TRACK_TIME_BOOKMARK -> {
+                    currentMeasure = parseTrackTimeBookmark(t);
+                    currentNoteStartTime = measureToTime(currentMeasure);
+                }
+                //case TEMPO -> tempo = parseTempo(t);
+                case VOICE -> {
+                    currentMeasure = 0.0;
+                    currentNoteStartTime = 0.0;
+                }
             }
         }
 
         return notes;
+    }
+
+    private void setupTempoFunction(List<Token> tokens) {
+        tempoFunction = new ArrayList<>();
+        double currentTrackTime = 0.0;
+
+        for (Token t : tokens) {
+            switch (t.getType()) {
+                case NOTE -> { // Add the duration to the counter - this is the xPos in the piecewise function
+                    String tokenString = t.toString();
+                    if (tokenString.charAt(0) != '[') currentTrackTime += calculateDuration(tokenString);
+                }
+                case TRACK_TIME_BOOKMARK -> currentTrackTime = parseTrackTimeBookmark(t);
+                case TEMPO -> { // Add a new node to the tempo piecewise function
+                    int tempo = parseTempo(t);
+                    tempoFunction.add(new PiecewiseFuncEntry(currentTrackTime, tempo));
+                }
+                case VOICE -> currentTrackTime = 0.0;
+            }
+        }
     }
 
 
@@ -85,6 +115,7 @@ public class Parser {
         Note note = new Note(tokenString);
         double duration = calculateDuration(tokenString);
         double frequency = Note.getFrequencyForNote(tokenString);
+        int tempo = getTempoAtMeasure(currentMeasure);
 
         // Convert the note start time and duration from number of measures to hundredths of a second
         // We do this because the microcontroller checks for new notes 100 times per second
@@ -100,6 +131,7 @@ public class Parser {
 
         // Add the current note's duration to the start time counter, so we know when the next note will start
         currentNoteStartTime += duration * JFUGUE_BEATS_PER_MEASURE * (1.0 / tempo) * MINUTES_TO_HUNDREDTHS_OF_SECOND;
+        currentMeasure += duration;
     }
 
     /**
@@ -147,7 +179,64 @@ public class Parser {
         return Integer.parseInt(bpm);
     }
 
+    private int getTempoAtMeasure(double measure) {
+        assert(!tempoFunction.isEmpty());
+
+        // Reverse iterate through the tempo list until we find an entry whose measure number
+        // is less than the measure number passed in
+        ListIterator<PiecewiseFuncEntry> iter = tempoFunction.listIterator(tempoFunction.size());
+        while (iter.hasPrevious()) {
+            PiecewiseFuncEntry entry = iter.previous();
+            if (entry.xVal <= measure) {
+                return entry.yVal;
+            }
+        }
+
+        // TODO: Remove later
+        System.err.println("Reached end of getTempoAtMeasure");
+        return 120;
+    }
+
+    /**
+     * Converts a measure number to the corresponding time since the start of the song, in
+     * hundredths of a second
+     * @param measure A measure number to convert, with a beat within the measure being
+     * represented as a fraction of a measure.
+     * @return The time corresponding to the measure number passed in, in hundredths of
+     * a second
+     */
+    private double measureToTime(double measure) {
+        double time = 0;
+
+        // Reverse iterate through the tempo list until we find an entry whose measure number
+        // is less than the measure number passed in
+        ListIterator<PiecewiseFuncEntry> iter = tempoFunction.listIterator(tempoFunction.size());
+        PiecewiseFuncEntry lastTempoEntry = null;
+        while (iter.hasPrevious()) {
+            lastTempoEntry = iter.previous();
+            if (lastTempoEntry.xVal <= measure) {
+                double duration = measure - lastTempoEntry.xVal;
+                time += duration * JFUGUE_BEATS_PER_MEASURE * (1.0 / lastTempoEntry.yVal) * MINUTES_TO_HUNDREDTHS_OF_SECOND;
+                break;
+            }
+        }
+
+        while (iter.hasPrevious()) {
+            PiecewiseFuncEntry currentTempoEntry = iter.previous();
+            assert lastTempoEntry != null;
+            double duration = lastTempoEntry.xVal - currentTempoEntry.xVal;
+            time += duration * JFUGUE_BEATS_PER_MEASURE * (1.0 / lastTempoEntry.yVal) * MINUTES_TO_HUNDREDTHS_OF_SECOND;
+            lastTempoEntry = currentTempoEntry;
+        }
+
+        return time;
+    }
+
     public String getInputFileName() {
         return inputFileName;
     }
+
+    private record PiecewiseFuncEntry(double xVal, int yVal) {}
 }
+
+
