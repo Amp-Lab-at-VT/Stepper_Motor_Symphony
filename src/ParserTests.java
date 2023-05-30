@@ -1,6 +1,7 @@
 import org.junit.Test;
 
 import javax.sound.midi.InvalidMidiDataException;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 
@@ -12,7 +13,7 @@ public class ParserTests {
     public void testNotesPlayedAfterTempoChange_1Part() throws InvalidMidiDataException, IOException {
         Parser p = new Parser();
 
-        p.readFile("testfiles/tempochange_1part.mid");
+        p.readFile(new File("testfiles/tempochange_1part.mid"));
 
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
@@ -49,7 +50,7 @@ public class ParserTests {
     public void testNotesPlayedAfterTempoChange_2Parts() throws InvalidMidiDataException, IOException {
         Parser p = new Parser();
 
-        p.readFile("testfiles/tempochange_2parts.mid");
+        p.readFile(new File("testfiles/tempochange_2parts.mid"));
 
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
@@ -113,7 +114,7 @@ public class ParserTests {
     public void testTempoChange_2Parts_TempoChangeOnPart2() throws InvalidMidiDataException, IOException {
         Parser p = new Parser();
 
-        p.readFile("testfiles/tempochange_2parts_decimalTempo.mid");
+        p.readFile(new File("testfiles/tempochange_2parts_decimalTempo.mid"));
 
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
@@ -177,7 +178,7 @@ public class ParserTests {
     public void testMultipleNotesIn1Part() throws InvalidMidiDataException, IOException {
         Parser p = new Parser();
 
-        p.readFile("testfiles/multipleNotesAtOnce_1part.mid");
+        p.readFile(new File("testfiles/multipleNotesAtOnce_1part.mid"));
 
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes

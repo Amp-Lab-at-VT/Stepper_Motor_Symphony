@@ -1,5 +1,6 @@
 import javax.sound.midi.InvalidMidiDataException;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -110,17 +111,17 @@ public class CommandPrompt {
             return;
         }
 
-        String filename = command.args[0];
+        File inputFile = new File(command.args[0]);
 
         // Create a new parser with the given filename
         try {
-            parser.readFile(filename);
+            parser.readFile(inputFile);
             notes = parser.parseMidi();
-            System.out.println("Successfully read file " + filename);
+            System.out.println("Successfully read file " + inputFile);
         } catch (InvalidMidiDataException e) {
-            System.out.println("File " + filename + " contains invalid MIDI data.");
+            System.out.println("File " + inputFile + " contains invalid MIDI data.");
         } catch (IOException e) {
-            System.out.println("File " + filename + " could not be found.");
+            System.out.println("File " + inputFile + " could not be found.");
         }
     }
 
@@ -165,15 +166,13 @@ public class CommandPrompt {
      * Writes the currently read file's data into a .ino file that can be run by an ESP8266.
      */
     private void write() {
-        if (parser.getInputFileName() == null) {
+        if (parser.getInputFile() == null) {
             System.out.println("An input file has not been read yet.");
             return;
         }
 
-        // Create the output file name
-        String[] fileNameArray = parser.getInputFileName().split("\\.");
-        fileNameArray[fileNameArray.length - 1] = ".ino";
-        String outputFileName = String.join("", fileNameArray);
+        String outputFileName = parser.getInputFile().getName();
+        outputFileName = outputFileName.substring(0, outputFileName.lastIndexOf('.')) + ".ino";
 
         // Assign the notes to motors and write the output to a file
         ArrayList<Motor> motors = assignNotes();
@@ -181,7 +180,7 @@ public class CommandPrompt {
             InoWriter writer = new InoWriter(motors, outputFileName);
             writer.run();
         } catch (IOException e) {
-            System.out.println("The file " + outputFileName + " could not be written to.");
+            System.out.println("The Arduino sketch file could not be written to.");
         }
 
         System.out.println("Program requires " + motors.size() + " motors");
@@ -191,7 +190,7 @@ public class CommandPrompt {
      * Prints parameters that can be changed by the user to the console
      */
     private void parameters() {
-        System.out.println("Input File Name: " + parser.getInputFileName());
+        System.out.println("Input File Name: " + parser.getInputFile());
 
         // TODO: fix these
         //System.out.println("preserveTracks: " + parser.getPreserveTracks());

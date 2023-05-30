@@ -21,7 +21,7 @@ public class Parser {
     private static final int JFUGUE_BEATS_PER_MEASURE = 4;
     private static final int MINUTES_TO_HUNDREDTHS_OF_SECOND = 6000;
 
-    private String inputFileName = null;
+    private File inputFile = null;
 
     // This Pattern object contains the midi file's raw data
     private Pattern midiPattern;
@@ -35,9 +35,9 @@ public class Parser {
 
 
 
-    public void readFile(String fileName) throws InvalidMidiDataException, IOException {
-        midiPattern = MidiFileManager.loadPatternFromMidi(new File(fileName));
-        inputFileName = fileName;
+    public void readFile(File file) throws InvalidMidiDataException, IOException {
+        inputFile = file;
+        midiPattern = MidiFileManager.loadPatternFromMidi(inputFile);
     }
 
     /**
@@ -229,8 +229,8 @@ public class Parser {
         return time;
     }
 
-    public String getInputFileName() {
-        return inputFileName;
+    public File getInputFile() {
+        return inputFile;
     }
 
     private record PiecewiseFuncEntry(double xVal, int yVal) {}
