@@ -37,8 +37,6 @@ public class Parser {
 
     public void readFile(String fileName) throws InvalidMidiDataException, IOException {
         midiPattern = MidiFileManager.loadPatternFromMidi(new File(fileName));
-        //TODO: remove debug line
-        System.out.println(midiPattern.toString());
         inputFileName = fileName;
     }
 
@@ -64,7 +62,6 @@ public class Parser {
                     currentMeasure = parseTrackTimeBookmark(t);
                     currentNoteStartTime = measureToTime(currentMeasure);
                 }
-                //case TEMPO -> tempo = parseTempo(t);
                 case VOICE -> {
                     currentMeasure = 0.0;
                     currentNoteStartTime = 0.0;

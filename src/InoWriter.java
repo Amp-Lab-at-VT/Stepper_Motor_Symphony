@@ -66,6 +66,8 @@ public class InoWriter {
                         }
                     }
                     """;
+
+    private static final String outputFolder = "arduino/";
     
     public InoWriter(ArrayList<Motor> motorList, String outputFileName) throws IOException {
         motors = motorList;
@@ -73,13 +75,18 @@ public class InoWriter {
         // Get the file name without the type extension
         String[] fileNameArray = outputFileName.split("\\.");
         fileNameArray[fileNameArray.length - 1] = "";
-        String outputFileNameWithoutType = String.join("", fileNameArray);
+        String outputFileNameWithoutType = outputFolder + String.join("", fileNameArray);
+
+        // Create the output directory
+        if(!Files.exists(new File("arduino/").toPath()) && !new File("arduino/").mkdir()) {
+            throw new IOException("Could not create output directory");
+        }
 
         // Arduino sketches require the .ino file to be in a parent directory with the same name
         // If the directory exists, just overwrite the contents;
         // Otherwise, try to create that directory and throw an IOException if it fails
         if (!Files.exists(new File(outputFileNameWithoutType).toPath()) && !new File(outputFileNameWithoutType).mkdir()) {
-            throw new IOException();
+            throw new IOException("Could not create Arduino sketch directory");
         }
 
         // Copy the C++ files to the output directory
@@ -109,9 +116,7 @@ public class InoWriter {
                 if (readFirstCommand) {
                     writer.write(", ");
                 }
-                //writer.write(TAB + TAB + "case " + n + ":\n");
                 writer.write(commands[n].toString());
-                //writer.write(TAB + TAB + TAB + "break;\n");
 
                 readFirstCommand = true;
             }
@@ -177,7 +182,6 @@ public class InoWriter {
         writer.flush();
         writer.close();
         System.out.println("Successfully wrote to " + outputPath);
-
     }
 
     private StringBuilder[] notesToCommands() {

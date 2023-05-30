@@ -104,15 +104,13 @@ public class CommandPrompt {
      *                argument will contain the name of the input file.
      */
     private void read(Command command) {
-        // "read" only takes 1 argument
-        String[] args = command.args();
-        if (args.length != 1) {
+        // "read" only takes 1 argument, the filename
+        if (command.args.length != 1) {
             System.out.println("Usage: read <filename>");
             return;
         }
 
-        // The filename is the first argument in the command
-        String filename = args[0];
+        String filename = command.args[0];
 
         // Create a new parser with the given filename
         try {
@@ -197,7 +195,6 @@ public class CommandPrompt {
 
         // TODO: fix these
         //System.out.println("preserveTracks: " + parser.getPreserveTracks());
-        //System.out.println("tempo: " + Parser.getTempo());
     }
 
     // TODO: Add functionality for preserving music tracks
