@@ -24,8 +24,7 @@ public class InoWriterTests {
 
         // Turn the midi into an Arduino sketch
         Parser p = new Parser();
-        p.readFile(new File("testfile.mid"));
-        ArrayList<SimpleNote> notes = p.parseMidi();
+        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfile.mid"));
         Collections.sort(notes);
         ArrayList<Motor> motors = NoteAssigner.assign(notes);
         InoWriter writer = new InoWriter(motors, "testfile.ino");
@@ -49,8 +48,7 @@ public class InoWriterTests {
     public void testFileWrite_midiNotInWorkingDir() throws IOException, InvalidMidiDataException {
         // Turn the midi into an Arduino sketch
         Parser p = new Parser();
-        p.readFile(new File("testfiles/testfile.mid"));
-        ArrayList<SimpleNote> notes = p.parseMidi();
+        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/testfile.mid"));
         Collections.sort(notes);
         ArrayList<Motor> motors = NoteAssigner.assign(notes);
         InoWriter writer = new InoWriter(motors, "testfile.ino");

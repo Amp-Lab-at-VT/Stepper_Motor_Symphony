@@ -21,8 +21,6 @@ public class Parser {
     private static final int JFUGUE_BEATS_PER_MEASURE = 4;
     private static final int MINUTES_TO_HUNDREDTHS_OF_SECOND = 6000;
 
-    private File inputFile = null;
-
     // This Pattern object contains the midi file's raw data
     private Pattern midiPattern;
 
@@ -33,19 +31,14 @@ public class Parser {
     private double currentMeasure = 0.0;
     private double currentNoteStartTime = 0.0;
 
-
-
-    public void readFile(File file) throws InvalidMidiDataException, IOException {
-        inputFile = file;
-        midiPattern = MidiFileManager.loadPatternFromMidi(inputFile);
-    }
-
     /**
      * Parses the midi file whose data is stored in the tokens list and returns the data
      * as a list of notes that can be played on stepper motors
      * @return An arraylist of notes with start times and durations in hundredths of a second
      */
-    public ArrayList<SimpleNote> parseMidi() {
+    public ArrayList<SimpleNote> parseMidi(File file) throws InvalidMidiDataException, IOException {
+        midiPattern = MidiFileManager.loadPatternFromMidi(file);
+
         ArrayList<SimpleNote> notes = new ArrayList<>();
         List<Token> tokens = midiPattern.getTokens();
 
@@ -95,7 +88,7 @@ public class Parser {
 
     /**
      * Takes a note/rest token and parses its data. If the token is a note, then the note is added
-     * to the notes arraylist. If the token is a rest, then the method only adds the rest's duration
+     * to the notes list. If the token is a rest, then the method only adds the rest's duration
      * to the note start time counter.
      * @param token The note/rest token to parse
      * @param notes A list of notes that the current token will be added to if it is a note
@@ -136,7 +129,7 @@ public class Parser {
      * JFugue provides a Note.getDuration() method, but it produces incorrect results for durations expressed in
      * scientific notation.
      * @param str
-     * @return The duration of the note token passed in the parameter as a double in number of measures
+     * @return The duration of the note token passed in the parameter in number of measures
      * @throws NumberFormatException If the duration within the String parameter is not a valid double
      */
     private double calculateDuration(String str) throws NumberFormatException {
@@ -172,12 +165,12 @@ public class Parser {
     }
 
     private int parseTimeSignature(Token token) throws NumberFormatException {
-        String bpm =  token.toString().substring(5, 6);
-        return Integer.parseInt(bpm);
+        String beatsPerMeasure = token.toString().substring(5, 6);
+        return Integer.parseInt(beatsPerMeasure);
     }
 
     private int getTempoAtMeasure(double measure) {
-        assert(!tempoFunction.isEmpty());
+        int tempo = 120;
 
         // Reverse iterate through the tempo list until we find an entry whose measure number
         // is less than the measure number passed in
@@ -185,13 +178,12 @@ public class Parser {
         while (iter.hasPrevious()) {
             PiecewiseFuncEntry entry = iter.previous();
             if (entry.xVal <= measure) {
-                return entry.yVal;
+                tempo = entry.yVal;
+                break;
             }
         }
 
-        // TODO: Remove later
-        System.err.println("Reached end of getTempoAtMeasure");
-        return 120;
+        return tempo;
     }
 
     /**
@@ -204,13 +196,13 @@ public class Parser {
      */
     private double measureToTime(double measure) {
         double time = 0;
+        PiecewiseFuncEntry lastTempoEntry = tempoFunction.get(tempoFunction.size() - 1);
 
-        // Reverse iterate through the tempo list until we find an entry whose measure number
-        // is less than the measure number passed in
+        // Calculate the time spent with the tempo at the input measure
         ListIterator<PiecewiseFuncEntry> iter = tempoFunction.listIterator(tempoFunction.size());
-        PiecewiseFuncEntry lastTempoEntry = null;
         while (iter.hasPrevious()) {
             lastTempoEntry = iter.previous();
+
             if (lastTempoEntry.xVal <= measure) {
                 double duration = measure - lastTempoEntry.xVal;
                 time += duration * JFUGUE_BEATS_PER_MEASURE * (1.0 / lastTempoEntry.yVal) * MINUTES_TO_HUNDREDTHS_OF_SECOND;
@@ -218,19 +210,15 @@ public class Parser {
             }
         }
 
+        // Calculate the time spent in the song before setting the current tempo
         while (iter.hasPrevious()) {
             PiecewiseFuncEntry currentTempoEntry = iter.previous();
-            assert lastTempoEntry != null;
             double duration = lastTempoEntry.xVal - currentTempoEntry.xVal;
             time += duration * JFUGUE_BEATS_PER_MEASURE * (1.0 / lastTempoEntry.yVal) * MINUTES_TO_HUNDREDTHS_OF_SECOND;
             lastTempoEntry = currentTempoEntry;
         }
 
         return time;
-    }
-
-    public File getInputFile() {
-        return inputFile;
     }
 
     private record PiecewiseFuncEntry(double xVal, int yVal) {}

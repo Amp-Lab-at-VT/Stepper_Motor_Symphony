@@ -13,11 +13,9 @@ public class ParserTests {
     public void testNotesPlayedAfterTempoChange_1Part() throws InvalidMidiDataException, IOException {
         Parser p = new Parser();
 
-        p.readFile(new File("testfiles/tempochange_1part.mid"));
-
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
-        ArrayList<SimpleNote> notes = p.parseMidi();
+        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/tempochange_1part.mid"));
         assertEquals(12, notes.size());
 
         assertEquals(0, notes.get(0).startTime());
@@ -50,11 +48,9 @@ public class ParserTests {
     public void testNotesPlayedAfterTempoChange_2Parts() throws InvalidMidiDataException, IOException {
         Parser p = new Parser();
 
-        p.readFile(new File("testfiles/tempochange_2parts.mid"));
-
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
-        ArrayList<SimpleNote> notes = p.parseMidi();
+        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/tempochange_2parts.mid"));
         assertEquals(24, notes.size());
 
         // Part 1 - Same as in the single part tempo change test
@@ -114,11 +110,9 @@ public class ParserTests {
     public void testTempoChange_2Parts_TempoChangeOnPart2() throws InvalidMidiDataException, IOException {
         Parser p = new Parser();
 
-        p.readFile(new File("testfiles/tempochange_2parts_decimalTempo.mid"));
-
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
-        ArrayList<SimpleNote> notes = p.parseMidi();
+        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/tempochange_2parts_decimalTempo.mid"));
         assertEquals(24, notes.size());
 
         // Part 1 - Same as in the single part tempo change test
@@ -178,11 +172,9 @@ public class ParserTests {
     public void testMultipleNotesIn1Part() throws InvalidMidiDataException, IOException {
         Parser p = new Parser();
 
-        p.readFile(new File("testfiles/multipleNotesAtOnce_1part.mid"));
-
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
-        ArrayList<SimpleNote> notes = p.parseMidi();
+        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/multipleNotesAtOnce_1part.mid"));
         assertEquals(8, notes.size());
 
         assertEquals(0, notes.get(0).startTime());

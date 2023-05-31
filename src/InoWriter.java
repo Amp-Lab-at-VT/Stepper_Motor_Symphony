@@ -75,7 +75,7 @@ public class InoWriter {
         // Get the file name without the type extension
         String[] fileNameArray = outputFileName.split("\\.");
         fileNameArray[fileNameArray.length - 1] = "";
-        String outputFileNameWithoutType = outputFolder + String.join("", fileNameArray);
+        String sketchDir = outputFolder + String.join("", fileNameArray);
 
         // Create the output directory
         if(!Files.exists(new File("arduino/").toPath()) && !new File("arduino/").mkdir()) {
@@ -85,21 +85,20 @@ public class InoWriter {
         // Arduino sketches require the .ino file to be in a parent directory with the same name
         // If the directory exists, just overwrite the contents;
         // Otherwise, try to create that directory and throw an IOException if it fails
-        if (!Files.exists(new File(outputFileNameWithoutType).toPath()) && !new File(outputFileNameWithoutType).mkdir()) {
+        if (!Files.exists(new File(sketchDir).toPath()) && !new File(sketchDir).mkdir()) {
             throw new IOException("Could not create Arduino sketch directory");
         }
 
-        // Copy the C++ files to the output directory
-        // TODO: Add support for standalone program execution instead of just in an IDE
-        File stepperCppSrc = new File("src/cpp/stepper.cpp");
-        File stepperCppDest = new File(outputFileNameWithoutType + "/stepper.cpp");
-        File stepperHppSrc = new File("src/cpp/stepper.hpp");
-        File stepperHppDest = new File(outputFileNameWithoutType + "/stepper.hpp");
+        // Copy the C++ library files to the output directory
+        File stepperCppSrc = new File("lib/stepper.cpp");
+        File stepperCppDest = new File(sketchDir + "/stepper.cpp");
+        File stepperHppSrc = new File("lib/stepper.hpp");
+        File stepperHppDest = new File(sketchDir + "/stepper.hpp");
         Files.copy(stepperCppSrc.toPath(), stepperCppDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
         Files.copy(stepperHppSrc.toPath(), stepperHppDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
         // Create the file that will hold the output program
-        outputPath = outputFileNameWithoutType + "/" + outputFileName;
+        outputPath = sketchDir + "/" + outputFileName;
         writer = new FileWriter(outputPath);
     }
     
@@ -111,12 +110,12 @@ public class InoWriter {
         StringBuilder[] commands = notesToCommands();
         boolean readFirstCommand = false;
         writer.write("const command commands[] PROGMEM = {");
-        for (int n = 0; n < commands.length; n++) {
-            if (commands[n] != null) {
+        for (StringBuilder command : commands) {
+            if (command != null) {
                 if (readFirstCommand) {
                     writer.write(", ");
                 }
-                writer.write(commands[n].toString());
+                writer.write(command.toString());
 
                 readFirstCommand = true;
             }
@@ -136,13 +135,12 @@ public class InoWriter {
                 int numCommands = commands[n].toString().split("},").length;
 
                 if (n == 0) {
+                    // The microcontroller starts playing notes after 1 hundredth of a second
                     writer.write("{1, " + numCommands + "}");
-
                 } else {
                     writer.write("{" + n + ", " + numCommands + "}");
                 }
                 numRecords++;
-
                 readFirstCommand = true;
             }
         }
@@ -186,31 +184,31 @@ public class InoWriter {
 
     private StringBuilder[] notesToCommands() {
 
-        //Find the end time of the last note
+        // Find the end time of the last note in the song
         int songEndTime = 0;
         for (Motor motor : motors) {
-            SimpleNote lastSimpleNote = motor.getNotes().get(motor.getNotes().size() - 1);
-            int currentEndTime = lastSimpleNote.startTime() + lastSimpleNote.duration();
+            var notes = motor.getNotes();
+            var lastNote = notes.get(notes.size() - 1);
+            int noteEndTime = lastNote.startTime() + lastNote.duration();
 
-            if (currentEndTime > songEndTime) {
-                songEndTime = currentEndTime;
+            if (noteEndTime > songEndTime) {
+                songEndTime = noteEndTime;
             }
         }
 
         StringBuilder[] commandArray = new StringBuilder[songEndTime + 1];
 
-        for (Motor motor : motors) {
-            for (SimpleNote currentSimpleNote : motor.getNotes()) {
+        for (var motor : motors) {
+            for (var note : motor.getNotes()) {
 
                 // Set up note parameters
-                int startTime = currentSimpleNote.startTime();
-                int endTime = startTime + currentSimpleNote.duration();
-                int pitch = (int) Math.round(currentSimpleNote.pitch());
+                int startTime = note.startTime();
+                int endTime = startTime + note.duration();
+                int pitch = (int) Math.round(note.pitch());
                 int stepInterval;
                 if (pitch == 0) {
                     stepInterval = 0;
-                }
-                else {
+                } else {
                     stepInterval = 1000000 / pitch;
                 }
 
@@ -220,16 +218,14 @@ public class InoWriter {
                 //Add the note start command
                 if (commandArray[startTime] == null) {
                     commandArray[startTime] = new StringBuilder(startCommand);
-                }
-                else {
+                } else {
                     commandArray[startTime].append(", ").append(startCommand);
                 }
 
                 //Add the note end command
                 if (commandArray[endTime] == null) {
                     commandArray[endTime] = new StringBuilder(endCommand);
-                }
-                else {
+                } else {
                     commandArray[endTime].append(", ").append(endCommand);
                 }
             }

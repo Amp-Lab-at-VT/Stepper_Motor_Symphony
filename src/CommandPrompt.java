@@ -20,6 +20,8 @@ public class CommandPrompt {
 
     private ArrayList<SimpleNote> notes;
 
+    private File inputFile;
+
     public CommandPrompt() {
         reader = new BufferedReader(new InputStreamReader(System.in));
         parser = new Parser();
@@ -32,12 +34,16 @@ public class CommandPrompt {
      * @throws IOException If the terminal cannot be read from
      */
     public void run() throws IOException {
-        Command currentCommand;
+        var currentCommand = new Command(CommandTypes.UNKNOWN, null);
         do {
             System.out.print(">>> ");
             String input = reader.readLine();
-            currentCommand = parseInput(input);
-            execute(currentCommand);
+
+            if (!input.isEmpty()) {
+                currentCommand = parseInput(input);
+                execute(currentCommand);
+            }
+
         } while (currentCommand.type() != CommandTypes.EXIT);
     }
 
@@ -96,7 +102,7 @@ public class CommandPrompt {
      * Tells the user that an unknown command was entered into the console
      */
     private void unknown() {
-        System.out.println("Unknown command");
+        System.err.println("Unknown command");
     }
 
     /**
@@ -107,21 +113,20 @@ public class CommandPrompt {
     private void read(Command command) {
         // "read" only takes 1 argument, the filename
         if (command.args.length != 1) {
-            System.out.println("Usage: read <filename>");
+            System.err.println("Usage: read <filename>");
             return;
         }
 
-        File inputFile = new File(command.args[0]);
+        inputFile = new File(command.args[0]);
 
         // Create a new parser with the given filename
         try {
-            parser.readFile(inputFile);
-            notes = parser.parseMidi();
+            notes = parser.parseMidi(inputFile);
             System.out.println("Successfully read file " + inputFile);
         } catch (InvalidMidiDataException e) {
-            System.out.println("File " + inputFile + " contains invalid MIDI data.");
+            System.err.println("File " + inputFile + " contains invalid MIDI data.");
         } catch (IOException e) {
-            System.out.println("File " + inputFile + " could not be found.");
+            System.err.println("File " + inputFile + " could not be found.");
         }
     }
 
@@ -134,7 +139,7 @@ public class CommandPrompt {
     private void set(Command command) {
         String[] args = command.args();
         if (args.length != 2) {
-            System.out.println("Usage: update <variable> <value>");
+            System.err.println("Usage: update <variable> <value>");
             return;
         }
 
@@ -153,12 +158,12 @@ public class CommandPrompt {
                     //parser.setPreserveTracks(false);
                 }
                 else {
-                    System.out.println("Unrecognized value: " + value);
-                    System.out.println("Required: true/false");
+                    System.err.println("Unrecognized value: " + value);
+                    System.err.println("Required: true/false");
                 }
                 break;
             default:
-                System.out.println("Unrecognized variable name: " + varName);
+                System.err.println("Unrecognized variable name: " + varName);
         }
     }
 
@@ -166,12 +171,12 @@ public class CommandPrompt {
      * Writes the currently read file's data into a .ino file that can be run by an ESP8266.
      */
     private void write() {
-        if (parser.getInputFile() == null) {
-            System.out.println("An input file has not been read yet.");
+        if (inputFile == null) {
+            System.err.println("An input file has not been read yet.");
             return;
         }
 
-        String outputFileName = parser.getInputFile().getName();
+        String outputFileName = inputFile.getName();
         outputFileName = outputFileName.substring(0, outputFileName.lastIndexOf('.')) + ".ino";
 
         // Assign the notes to motors and write the output to a file
@@ -180,7 +185,8 @@ public class CommandPrompt {
             InoWriter writer = new InoWriter(motors, outputFileName);
             writer.run();
         } catch (IOException e) {
-            System.out.println("The Arduino sketch file could not be written to.");
+            System.err.println("The Arduino sketch file could not be written to.");
+            return;
         }
 
         System.out.println("Program requires " + motors.size() + " motors");
@@ -190,7 +196,7 @@ public class CommandPrompt {
      * Prints parameters that can be changed by the user to the console
      */
     private void parameters() {
-        System.out.println("Input File Name: " + parser.getInputFile());
+        System.out.println("Input File Name: " + inputFile);
 
         // TODO: fix these
         //System.out.println("preserveTracks: " + parser.getPreserveTracks());
