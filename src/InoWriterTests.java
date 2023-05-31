@@ -1,4 +1,3 @@
-import org.jfugue.theory.Note;
 import org.junit.Test;
 
 import javax.sound.midi.InvalidMidiDataException;
@@ -8,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -26,7 +26,7 @@ public class InoWriterTests {
         Parser p = new Parser();
         ArrayList<SimpleNote> notes = p.parseMidi(new File("testfile.mid"));
         Collections.sort(notes);
-        ArrayList<Motor> motors = NoteAssigner.assign(notes);
+        List<Motor> motors = NoteAssigner.condensingAssign(notes);
         InoWriter writer = new InoWriter(motors, "testfile.ino");
         writer.run();
 
@@ -50,7 +50,7 @@ public class InoWriterTests {
         Parser p = new Parser();
         ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/testfile.mid"));
         Collections.sort(notes);
-        ArrayList<Motor> motors = NoteAssigner.assign(notes);
+        List<Motor> motors = NoteAssigner.condensingAssign(notes);
         InoWriter writer = new InoWriter(motors, "testfile.ino");
         writer.run();
 

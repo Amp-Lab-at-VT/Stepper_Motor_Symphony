@@ -21,9 +21,6 @@ public class Parser {
     private static final int JFUGUE_BEATS_PER_MEASURE = 4;
     private static final int MINUTES_TO_HUNDREDTHS_OF_SECOND = 6000;
 
-    // This Pattern object contains the midi file's raw data
-    private Pattern midiPattern;
-
     private ArrayList<PiecewiseFuncEntry> tempoFunction;
 
     // A counter to store the start time of the current note being processed, in measures since the beginning of the
@@ -37,10 +34,12 @@ public class Parser {
      * @return An arraylist of notes with start times and durations in hundredths of a second
      */
     public ArrayList<SimpleNote> parseMidi(File file) throws InvalidMidiDataException, IOException {
-        midiPattern = MidiFileManager.loadPatternFromMidi(file);
+        // This contains the midi file's raw data
+        Pattern midiPattern = MidiFileManager.loadPatternFromMidi(file);
 
         ArrayList<SimpleNote> notes = new ArrayList<>();
         List<Token> tokens = midiPattern.getTokens();
+        int voiceIndex = 0;
 
         setupTempoFunction(tokens);
 
@@ -50,7 +49,7 @@ public class Parser {
 
         for (Token t : tokens) {
             switch (t.getType()) {
-                case NOTE -> parseNote(t, notes);
+                case NOTE -> parseNote(t, voiceIndex, notes);
                 case TRACK_TIME_BOOKMARK -> {
                     currentMeasure = parseTrackTimeBookmark(t);
                     currentNoteStartTime = measureToTime(currentMeasure);
@@ -58,6 +57,7 @@ public class Parser {
                 case VOICE -> {
                     currentMeasure = 0.0;
                     currentNoteStartTime = 0.0;
+                    voiceIndex = parseVoice(t);
                 }
             }
         }
@@ -93,7 +93,7 @@ public class Parser {
      * @param token The note/rest token to parse
      * @param notes A list of notes that the current token will be added to if it is a note
      */
-    private void parseNote(Token token, ArrayList<SimpleNote> notes) {
+    private void parseNote(Token token, int voiceIndex, ArrayList<SimpleNote> notes) {
         String tokenString = token.toString();
 
         // Percussion, which we want to ignore, is enclosed in square brackets
@@ -115,7 +115,7 @@ public class Parser {
 
         // If the Note token isn't a rest (i.e. it's an actual note), add it to the notes list
         if (!note.isRest()) {
-            SimpleNote newNote = new SimpleNote(startTimeInHundredths, frequency, durationInHundredths);
+            SimpleNote newNote = new SimpleNote(startTimeInHundredths, frequency, durationInHundredths, voiceIndex);
             notes.add(newNote);
         }
 
@@ -167,6 +167,11 @@ public class Parser {
     private int parseTimeSignature(Token token) throws NumberFormatException {
         String beatsPerMeasure = token.toString().substring(5, 6);
         return Integer.parseInt(beatsPerMeasure);
+    }
+
+    private int parseVoice(Token token) {
+        String voiceNum = token.toString().substring(1);
+        return Integer.parseInt(voiceNum);
     }
 
     private int getTempoAtMeasure(double measure) {

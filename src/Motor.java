@@ -2,18 +2,27 @@ import java.util.ArrayList;
 
 public class Motor {
     
-    private final int index;
+    private int index;
     private final ArrayList<IntPair> inUseTimes;
     private final ArrayList<SimpleNote> notes;
     
-    public Motor(int newIndex) {
-        index = newIndex;
+    public Motor() {
+        inUseTimes = new ArrayList<>();
+        notes = new ArrayList<>();
+    }
+
+    public Motor(int motorIndex) {
+        index = motorIndex;
         inUseTimes = new ArrayList<>();
         notes = new ArrayList<>();
     }
 
     public int getIndex() {
         return index;
+    }
+
+    public void setIndex(int newIndex) {
+        index = newIndex;
     }
 
     public ArrayList<SimpleNote> getNotes() {

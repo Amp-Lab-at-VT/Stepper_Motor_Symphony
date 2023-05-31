@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.List;
 
 public class CommandPrompt {
 
@@ -21,6 +21,7 @@ public class CommandPrompt {
     private ArrayList<SimpleNote> notes;
 
     private File inputFile;
+    private boolean preserveVoiceInfo = true;
 
     public CommandPrompt() {
         reader = new BufferedReader(new InputStreamReader(System.in));
@@ -143,27 +144,21 @@ public class CommandPrompt {
             return;
         }
 
-        String varName = args[0];
-        String value = args[1];
+        String varName = args[0].toLowerCase();
+        String value = args[1].toLowerCase();
 
         switch (varName) {
-            case "preserveTracks":
-                String lowerCase = value.toLowerCase();
-                if (lowerCase.equals("true")) {
-                    // TODO: add this
-                    //parser.setPreserveTracks(true);
-                }
-                else if (lowerCase.equals("false")) {
-                    // TODO: add this
-                    //parser.setPreserveTracks(false);
-                }
-                else {
-                    System.err.println("Unrecognized value: " + value);
+            case "preservetracks", "p" -> {
+                if (value.equals("true")) {
+                    preserveVoiceInfo = true;
+                } else if (value.equals("false")) {
+                    preserveVoiceInfo = false;
+                } else {
+                    System.err.println("Unrecognized value");
                     System.err.println("Required: true/false");
                 }
-                break;
-            default:
-                System.err.println("Unrecognized variable name: " + varName);
+            }
+            default -> System.err.println("Unrecognized variable name: " + varName);
         }
     }
 
@@ -180,7 +175,7 @@ public class CommandPrompt {
         outputFileName = outputFileName.substring(0, outputFileName.lastIndexOf('.')) + ".ino";
 
         // Assign the notes to motors and write the output to a file
-        ArrayList<Motor> motors = assignNotes();
+        List<Motor> motors = assignNotes();
         try {
             InoWriter writer = new InoWriter(motors, outputFileName);
             writer.run();
@@ -197,15 +192,17 @@ public class CommandPrompt {
      */
     private void parameters() {
         System.out.println("Input File Name: " + inputFile);
-
-        // TODO: fix these
-        //System.out.println("preserveTracks: " + parser.getPreserveTracks());
+        System.out.println("preserveVoices: " + preserveVoiceInfo);
     }
 
-    // TODO: Add functionality for preserving music tracks
-    private ArrayList<Motor> assignNotes() {
-        Collections.sort(notes);
-        return NoteAssigner.assign(notes);
+    private List<Motor> assignNotes() {
+        if (preserveVoiceInfo) {
+            notes.sort(SimpleNote.voiceOrder);
+            return NoteAssigner.assign(notes);
+        } else {
+            notes.sort(SimpleNote.chronologicalOrder);
+            return NoteAssigner.condensingAssign(notes);
+        }
     }
 
     /**

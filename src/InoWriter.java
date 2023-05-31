@@ -4,10 +4,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.List;
 
 public class InoWriter {
     
-    private final ArrayList<Motor> motors;
+    private final List<Motor> motors;
     private FileWriter writer = null;
 
     private String outputPath = "";
@@ -69,7 +70,7 @@ public class InoWriter {
 
     private static final String outputFolder = "arduino/";
     
-    public InoWriter(ArrayList<Motor> motorList, String outputFileName) throws IOException {
+    public InoWriter(List<Motor> motorList, String outputFileName) throws IOException {
         motors = motorList;
 
         // Get the file name without the type extension
