@@ -25,7 +25,7 @@ public class InoWriterTests {
         // Turn the midi into an Arduino sketch
         Parser p = new Parser();
         ArrayList<SimpleNote> notes = p.parseMidi(new File("testfile.mid"));
-        Collections.sort(notes);
+        notes.sort(SimpleNote.chronologicalOrder);
         List<Motor> motors = NoteAssigner.condensingAssign(notes);
         InoWriter writer = new InoWriter(motors, "testfile.ino");
         writer.run();
@@ -49,7 +49,7 @@ public class InoWriterTests {
         // Turn the midi into an Arduino sketch
         Parser p = new Parser();
         ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/testfile.mid"));
-        Collections.sort(notes);
+        notes.sort(SimpleNote.chronologicalOrder);
         List<Motor> motors = NoteAssigner.condensingAssign(notes);
         InoWriter writer = new InoWriter(motors, "testfile.ino");
         writer.run();
