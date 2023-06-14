@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.stream.Collectors;
 
 /**
  * Parses MIDI data to create a list of notes contained in the file
@@ -38,7 +39,10 @@ public class Parser {
         Pattern midiPattern = MidiFileManager.loadPatternFromMidi(file);
 
         ArrayList<SimpleNote> notes = new ArrayList<>();
-        List<Token> tokens = midiPattern.getTokens();
+        //List<Token> tokens = midiPattern.getTokens();
+        List<Token> tokens = midiPattern.getTokens().stream()
+                .filter(x->x.getType() != Token.TokenType.FUNCTION)
+                .collect(Collectors.toList());
         int voiceIndex = 0;
 
         setupTempoFunction(tokens);
@@ -115,8 +119,14 @@ public class Parser {
 
         // If the Note token isn't a rest (i.e. it's an actual note), add it to the notes list
         if (!note.isRest()) {
+            if (durationInHundredths == 0) {
+                System.out.println("Fixing note with duration 0");
+                durationInHundredths = 1;
+            }
+
             SimpleNote newNote = new SimpleNote(startTimeInHundredths, frequency, durationInHundredths, voiceIndex);
             notes.add(newNote);
+
         }
 
         // Add the current note's duration to the start time counter, so we know when the next note will start

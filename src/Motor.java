@@ -1,10 +1,12 @@
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 public class Motor {
     
     private int index;
-    private final ArrayList<IntPair> inUseTimes;
-    private final ArrayList<SimpleNote> notes;
+    private ArrayList<IntPair> inUseTimes;
+    private ArrayList<SimpleNote> notes;
     
     public Motor() {
         inUseTimes = new ArrayList<>();
@@ -29,6 +31,10 @@ public class Motor {
         return notes;
     }
 
+    public ArrayList<IntPair> getUsageTimes() {
+        return inUseTimes;
+    }
+
     /**
      * Adds a new note to be played on this motor.
      * @param newNote The note to be added, which must not conflict with any notes already assigned to this motor.
@@ -47,10 +53,132 @@ public class Motor {
         return time >= lastNoteTimes.startTime() && time < lastNoteTimes.endTime();
     }
 
+    public static final Comparator<Motor> onTimeDescendingOrder = (m1, m2) -> {
+        int difference = m1.getOnTime() - m2.getOnTime();
+
+        return Integer.compare(0, difference);
+    };
+
+    private int getOnTime() {
+        int sum = 0;
+
+        for (var t : inUseTimes) {
+            sum += t.endTime - t.startTime;
+        }
+
+        return sum;
+    }
+
+    public boolean conflictsWith(Motor other) {
+        for (var p1 : inUseTimes) {
+            for (var p2 : other.inUseTimes) {
+                if (p1.conflictsWith(p2)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public double getPercentConflict(Motor other) {
+        int m1OnTime = 0;
+        int m2OnTime = 0;
+        for (var p1 : inUseTimes) {
+            m1OnTime += p1.endTime - p1.startTime;
+        }
+        for (var p2 : other.inUseTimes) {
+            m2OnTime += p2.endTime - p2.startTime;
+        }
+
+        int conflictDuration = 0;
+        for (var p1 : inUseTimes) {
+            for (var p2 : other.inUseTimes) {
+//                if (p1.startTime >= p2.startTime && p1.startTime < p2.endTime) {
+//                    conflictDuration += p2.endTime - p1.startTime;
+//                } else if (p2.startTime >= p1.startTime && p2.startTime < p1.endTime) {
+//                    conflictDuration += p1.endTime - p2.startTime;
+//                }
+                // Check if the ranges overlap
+                if (p1.startTime < p2.endTime && p1.endTime > p2.startTime) {
+                    int overlapLow = Math.max(p1.startTime, p2.startTime);
+                    int overlapHigh = Math.min(p1.endTime, p2.endTime);
+                    conflictDuration += overlapHigh - overlapLow;
+                }
+            }
+        }
+
+        if (m1OnTime > m2OnTime) {
+            return ((double) conflictDuration) / m1OnTime;
+        } else {
+            return ((double) conflictDuration) / m2OnTime;
+        }
+    }
+
+    public void forceCombine(Motor other) {
+        ArrayList<SimpleNote> combined = new ArrayList<>();
+        ArrayList<IntPair> newUsageTimes = new ArrayList<>();
+
+        // Perform a merge sort on each motor's note lists
+        // If the next note to add conflicts with the note that was added last,
+        // update the last note's duration such that the notes won't conflict
+        int index1 = 0;
+        int index2 = 0;
+        while (index1 < this.notes.size() || index2 < other.notes.size()) {
+            // Get the next data to add to the combined list
+            SimpleNote nextNote;
+            IntPair nextUsageTime;
+            if (index1 == this.notes.size()) { // Reached end of list 1
+                nextNote = other.notes.get(index2);
+                nextUsageTime = other.inUseTimes.get(index2);
+                index2++;
+            } else if (index2 == other.notes.size()) { // Reached end of list 2
+                nextNote = notes.get(index1);
+                nextUsageTime = inUseTimes.get(index1);
+                index1++;
+            } else if (inUseTimes.get(index1).startTime < other.inUseTimes.get(index2).startTime) {
+                // Note in list 1 comes before note in list 2
+                nextNote = notes.get(index1);
+                nextUsageTime = inUseTimes.get(index1);
+                index1++;
+            } else { // Note in list 2 comes before note in list 1
+                nextNote = other.notes.get(index2);
+                nextUsageTime = other.inUseTimes.get(index2);
+                index2++;
+            }
+
+            // Check if the next data to add conflicts with the previous
+            if (!combined.isEmpty() && newUsageTimes.get(newUsageTimes.size() - 1).conflictsWith(nextUsageTime)) {
+                // Change the previously added data so that it doesn't conflict
+                var oldNote = combined.get(combined.size() - 1);
+                int newDuration = nextNote.startTime() - oldNote.startTime();
+                var newNote = new SimpleNote(oldNote.startTime(), oldNote.pitch(), newDuration, oldNote.voiceIndex());
+                combined.remove(combined.size() - 1);
+                combined.add(newNote);
+
+                var oldUsagePair = newUsageTimes.get(newUsageTimes.size() - 1);
+                var newUsageTime = new IntPair(oldUsagePair.startTime, nextUsageTime.endTime);
+                newUsageTimes.remove(newUsageTimes.size() - 1);
+                newUsageTimes.add(newUsageTime);
+            }
+            combined.add(nextNote);
+            newUsageTimes.add(nextUsageTime);
+        }
+
+        // Now we add the last notes from the list that didn't reach the end
+        notes = combined;
+        inUseTimes = newUsageTimes;
+    }
+
     /**
      * A pair of ints used to determine whether the stepper motor is in use
      * at a certain time. The ints specify the start and end times of a note
      * the motor is playing, in hundredths of a second
      */
-    private record IntPair(int startTime, int endTime) {}
+    record IntPair(int startTime, int endTime) {
+        public boolean conflictsWith(IntPair other) {
+            return (this.startTime >= other.startTime && this.startTime < other.endTime)
+                    || (other.startTime >= this.startTime && other.startTime < this.endTime);
+        }
+    }
 }

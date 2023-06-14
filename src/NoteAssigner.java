@@ -1,10 +1,13 @@
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ListIterator;
 
 /**
  * Assigns notes to stepper motors
  */
 public class NoteAssigner {
+
+    private static final double ACCEPTABLE_CONFLICT_THRESHOLD = 0.03;
 
     public static ArrayList<Motor> assign(List<SimpleNote> notes) {
         ArrayList<Motor> motors = new ArrayList<>();
@@ -23,6 +26,23 @@ public class NoteAssigner {
                 // Get the sublist for the current voice and assign its notes to motors
                 var sublist = notes.subList(firstVoiceNoteIndex, i);
                 var voiceMotors = condensingAssign(sublist);
+
+                // If the condensing assignment added more than one motor, check the percentage of time
+                // that notes between the motors are playing at the same time. If the percentage is less
+                // than the acceptable threshold, then combine the motors' note lists into one.
+                if (voiceMotors.size() > 1) {
+                    for (int n = 1; n < voiceMotors.size(); n++) {
+                        double conflict = voiceMotors.get(0).getPercentConflict(voiceMotors.get(n));
+                        System.out.println("% conflict: " + conflict);
+
+                        // Combine the motors' note lists
+                        if (conflict <= ACCEPTABLE_CONFLICT_THRESHOLD) {
+                            voiceMotors.get(0).forceCombine(voiceMotors.get(n));
+                            voiceMotors.remove(n);
+                            n--;
+                        }
+                    }
+                }
                 motors.addAll(voiceMotors);
 
                 firstVoiceNoteIndex = i;
@@ -34,8 +54,32 @@ public class NoteAssigner {
         if (firstVoiceNoteIndex < notes.size() - 1) {
             var sublist = notes.subList(firstVoiceNoteIndex, notes.size());
             var voiceMotors = condensingAssign(sublist);
+            if (voiceMotors.size() > 1) {
+                for (int n = 1; n < voiceMotors.size(); n++) {
+                    double conflict = voiceMotors.get(0).getPercentConflict(voiceMotors.get(n));
+                    System.out.println("% conflict: " + conflict);
+
+                    // Combine the motors' note lists
+                    if (conflict <= ACCEPTABLE_CONFLICT_THRESHOLD) {
+                        voiceMotors.get(0).forceCombine(voiceMotors.get(n));
+                        voiceMotors.remove(n);
+                        n--;
+                    }
+                }
+            }
             motors.addAll(voiceMotors);
         }
+
+        // Sort the motors by the length of time that they are playing a note
+        // Motors that get used more often will appear earlier in the list
+        motors.sort(Motor.onTimeDescendingOrder);
+
+        // Set the index for each motor
+        for (int i = 0; i < motors.size(); i++) {
+            motors.get(i).setIndex(i);
+        }
+
+        joinTracks(motors);
 
         // Set the index for each motor
         for (int i = 0; i < motors.size(); i++) {
@@ -79,5 +123,50 @@ public class NoteAssigner {
         }
 
         return motors;
+    }
+
+    private static void joinTracks(List<Motor> motors) {
+        boolean finished = false;
+        while (!finished) {
+            ListIterator<Motor> i1 = motors.listIterator(motors.size());
+            ListIterator<Motor> i2 = motors.listIterator(motors.size());
+            finished = true;
+
+            boolean alreadyCombinedList = false;
+            while (i1.hasPrevious()) {
+                if (alreadyCombinedList) break;
+
+                Motor m1 = i1.previous();
+
+                while (i2.hasPrevious()) {
+                    Motor m2 = i2.previous();
+                    boolean conflict = m1.conflictsWith(m2);
+                    if (!conflict) {
+                        finished = false;
+
+                        // Combine motors' note lists into the motor with the lower index
+                        Motor higher;
+                        Motor lower;
+                        if (m1.getIndex() > m2.getIndex()) {
+                            higher = m1;
+                            lower = m2;
+                        } else {
+                            higher = m2;
+                            lower = m1;
+                        }
+                        for (var note : higher.getNotes()) {
+                            lower.getNotes().add(note);
+                            lower.getUsageTimes().add(new Motor.IntPair(note.startTime(), note.startTime() + note.duration()));
+                        }
+                        lower.getNotes().sort(SimpleNote.chronologicalOrder);
+
+                        // Remove the motor with the higher index
+                        motors.remove(higher);
+                        alreadyCombinedList = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
 }
