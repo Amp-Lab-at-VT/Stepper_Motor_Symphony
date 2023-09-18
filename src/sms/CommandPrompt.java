@@ -1,3 +1,5 @@
+package sms;
+
 import javax.sound.midi.InvalidMidiDataException;
 import java.io.BufferedReader;
 import java.io.File;
@@ -6,7 +8,6 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.ListIterator;
 
 public class CommandPrompt {
 
@@ -18,11 +19,9 @@ public class CommandPrompt {
 
     // Used for reading a MIDI file
     private final Parser parser;
-
-    private ArrayList<SimpleNote> notes;
+    private Pair<ArrayList<Note>, ArrayList<Percussion>> midiData;
 
     private File inputFile;
-    private boolean preserveVoiceInfo = true;
 
     public CommandPrompt() {
         reader = new BufferedReader(new InputStreamReader(System.in));
@@ -121,9 +120,9 @@ public class CommandPrompt {
 
         inputFile = new File(command.args[0]);
 
-        // Create a new parser with the given filename
+        // Try to parse the file entered by the user
         try {
-            notes = parser.parseMidi(inputFile);
+            midiData = parser.parseMidi(inputFile);
             System.out.println("Successfully read file " + inputFile);
         } catch (InvalidMidiDataException e) {
             System.err.println("File " + inputFile + " contains invalid MIDI data.");
@@ -151,9 +150,9 @@ public class CommandPrompt {
         switch (varName) {
             case "preservetracks", "p" -> {
                 if (value.equals("true")) {
-                    preserveVoiceInfo = true;
+                    parser.setPreserveVoices(true);
                 } else if (value.equals("false")) {
-                    preserveVoiceInfo = false;
+                    parser.setPreserveVoices(false);
                 } else {
                     System.err.println("Unrecognized value");
                     System.err.println("Required: true/false");
@@ -178,7 +177,7 @@ public class CommandPrompt {
         // Assign the notes to motors and write the output to a file
         List<Motor> motors = assignNotes();
         try {
-            InoWriter writer = new InoWriter(motors, outputFileName);
+            InoWriter writer = new InoWriter(motors, midiData.second(), outputFileName);
             writer.run();
         } catch (IOException e) {
             System.err.println("The Arduino sketch file could not be written to.");
@@ -193,16 +192,20 @@ public class CommandPrompt {
      */
     private void parameters() {
         System.out.println("Input File Name: " + inputFile);
-        System.out.println("preserveVoices: " + preserveVoiceInfo);
+        System.out.println("preserveVoices: " + parser.getPreserveVoices());
     }
 
+    /**
+     * This method entails assigning notes to motors
+     * @return List of Motor(s)
+     */
     private List<Motor> assignNotes() {
-        if (preserveVoiceInfo) {
-            notes.sort(SimpleNote.voiceOrder);
-            return NoteAssigner.assign(notes);
+        if (parser.getPreserveVoices()) {
+            midiData.first().sort(Note.voiceOrder);
+            return NoteAssigner.assign(midiData.first());
         } else {
-            notes.sort(SimpleNote.chronologicalOrder);
-            return NoteAssigner.condensingAssign(notes);
+            midiData.first().sort(Note.chronologicalOrder);
+            return NoteAssigner.condensingAssign(midiData.first());
         }
     }
 

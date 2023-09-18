@@ -1,3 +1,5 @@
+package sms;
+
 import org.junit.Test;
 
 import javax.sound.midi.InvalidMidiDataException;
@@ -6,7 +8,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -24,10 +25,12 @@ public class InoWriterTests {
 
         // Turn the midi into an Arduino sketch
         Parser p = new Parser();
-        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfile.mid"));
-        notes.sort(SimpleNote.chronologicalOrder);
+        var midiData = p.parseMidi(new File("testfile.mid"));
+        ArrayList<Note> notes = midiData.first();
+        ArrayList<Percussion> percussion = midiData.second();
+        notes.sort(Note.chronologicalOrder);
         List<Motor> motors = NoteAssigner.condensingAssign(notes);
-        InoWriter writer = new InoWriter(motors, "testfile.ino");
+        InoWriter writer = new InoWriter(motors, percussion, "testfile.ino");
         writer.run();
 
         assertTrue(Files.exists(new File("arduino/").toPath()));
@@ -48,10 +51,12 @@ public class InoWriterTests {
     public void testFileWrite_midiNotInWorkingDir() throws IOException, InvalidMidiDataException {
         // Turn the midi into an Arduino sketch
         Parser p = new Parser();
-        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/testfile.mid"));
-        notes.sort(SimpleNote.chronologicalOrder);
+        var midiData = p.parseMidi(new File("testfiles/testfile.mid"));
+        ArrayList<Note> notes = midiData.first();
+        ArrayList<Percussion> percussion = midiData.second();
+        notes.sort(Note.chronologicalOrder);
         List<Motor> motors = NoteAssigner.condensingAssign(notes);
-        InoWriter writer = new InoWriter(motors, "testfile.ino");
+        InoWriter writer = new InoWriter(motors, percussion, "testfile.ino");
         writer.run();
 
         assertTrue(Files.exists(new File("arduino/").toPath()));

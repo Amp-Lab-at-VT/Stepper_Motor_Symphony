@@ -1,3 +1,8 @@
+package sms;
+
+import sms.Motor;
+import sms.Note;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
@@ -9,7 +14,7 @@ public class NoteAssigner {
 
     private static final double ACCEPTABLE_CONFLICT_THRESHOLD = 0.03;
 
-    public static ArrayList<Motor> assign(List<SimpleNote> notes) {
+    public static ArrayList<Motor> assign(List<Note> notes) {
         ArrayList<Motor> motors = new ArrayList<>();
         if (notes.isEmpty()) return motors;
 
@@ -98,7 +103,7 @@ public class NoteAssigner {
      * @param notes The list of notes to be assigned
      * @return A list of motors, each containing their assigned notes
      */
-    public static List<Motor> condensingAssign(List<SimpleNote> notes) {
+    public static List<Motor> condensingAssign(List<Note> notes) {
         ArrayList<Motor> motors = new ArrayList<>();
 
         for (var note : notes) {
@@ -158,7 +163,7 @@ public class NoteAssigner {
                             lower.getNotes().add(note);
                             lower.getUsageTimes().add(new Motor.IntPair(note.startTime(), note.startTime() + note.duration()));
                         }
-                        lower.getNotes().sort(SimpleNote.chronologicalOrder);
+                        lower.getNotes().sort(Note.chronologicalOrder);
 
                         // Remove the motor with the higher index
                         motors.remove(higher);

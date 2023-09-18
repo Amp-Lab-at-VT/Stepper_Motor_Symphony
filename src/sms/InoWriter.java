@@ -1,14 +1,18 @@
+package sms;
+
+import sms.Motor;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
 import java.util.List;
 
 public class InoWriter {
     
     private final List<Motor> motors;
+    private final List<Percussion> percussion;
     private FileWriter writer = null;
 
     private String outputPath = "";
@@ -70,8 +74,9 @@ public class InoWriter {
 
     private static final String outputFolder = "arduino/";
     
-    public InoWriter(List<Motor> motorList, String outputFileName) throws IOException {
+    public InoWriter(List<Motor> motorList, List<Percussion> percussionList, String outputFileName) throws IOException {
         motors = motorList;
+        percussion = percussionList;
 
         // Get the file name without the type extension
         String[] fileNameArray = outputFileName.split("\\.");
@@ -109,6 +114,7 @@ public class InoWriter {
 
         //Write the music command data
         StringBuilder[] commands = notesToCommands();
+        addPercussionCommands(commands);
         boolean readFirstCommand = false;
         writer.write("const command commands[] PROGMEM = {");
         for (StringBuilder command : commands) {
@@ -185,18 +191,7 @@ public class InoWriter {
 
     private StringBuilder[] notesToCommands() {
 
-        // Find the end time of the last note in the song
-        int songEndTime = 0;
-        for (Motor motor : motors) {
-            var notes = motor.getNotes();
-            var lastNote = notes.get(notes.size() - 1);
-            int noteEndTime = lastNote.startTime() + lastNote.duration();
-
-            if (noteEndTime > songEndTime) {
-                songEndTime = noteEndTime;
-            }
-        }
-
+        int songEndTime = getEndTime();
         StringBuilder[] commandArray = new StringBuilder[songEndTime + 1];
 
         for (var motor : motors) {
@@ -206,14 +201,14 @@ public class InoWriter {
                 int startTime = note.startTime();
                 int endTime = startTime + note.duration();
                 int pitch = (int) Math.round(note.pitch());
-                int stepInterval;
+                String stepInterval;
                 if (pitch == 0) {
-                    stepInterval = 0;
+                    stepInterval = "STOP";
                 } else {
-                    stepInterval = 1000000 / pitch;
+                    stepInterval = String.valueOf(1000000 / pitch);
                 }
 
-                String startCommand = "{" + motor.getIndex() + ", " + stepInterval + "}";
+                String startCommand = "{MOTOR" + motor.getIndex() + ", " + stepInterval + "}";
                 String endCommand = "{" + motor.getIndex() + ", 0}";
 
                 //Add the note start command
@@ -233,6 +228,45 @@ public class InoWriter {
         }
 
         return commandArray;
+    }
+
+    void addPercussionCommands(StringBuilder[] commandArray) {
+        for (Percussion p : percussion) {
+            String command = "{PERCUSSION0, " + p.type() + "}";
+
+            //Add the command
+            if (commandArray[p.startTime()] == null) {
+                commandArray[p.startTime()] = new StringBuilder(command);
+            } else {
+                commandArray[p.startTime()].append(", ").append(command);
+            }
+        }
+    }
+
+    /**
+     * Gets the time at which the song passed into this InoWriter object ends
+     * @return An int representing the time, in hundredths of a second, at which the song ends
+     */
+    int getEndTime() {
+        int songEndTime = 0;
+
+        for (Motor motor : motors) {
+            var notes = motor.getNotes();
+            var lastNote = notes.get(notes.size() - 1);
+            int noteEndTime = lastNote.startTime() + lastNote.duration();
+
+            if (noteEndTime > songEndTime) {
+                songEndTime = noteEndTime;
+            }
+        }
+
+        for (Percussion p : percussion) {
+            if (p.startTime() > songEndTime) {
+                songEndTime = p.startTime();
+            }
+        }
+
+        return songEndTime;
     }
 
 }

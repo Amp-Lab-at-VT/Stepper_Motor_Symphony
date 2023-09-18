@@ -1,12 +1,13 @@
+package sms;
+
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
 
 public class Motor {
     
     private int index;
     private ArrayList<IntPair> inUseTimes;
-    private ArrayList<SimpleNote> notes;
+    private ArrayList<Note> notes;
     
     public Motor() {
         inUseTimes = new ArrayList<>();
@@ -27,7 +28,7 @@ public class Motor {
         index = newIndex;
     }
 
-    public ArrayList<SimpleNote> getNotes() {
+    public ArrayList<Note> getNotes() {
         return notes;
     }
 
@@ -39,7 +40,7 @@ public class Motor {
      * Adds a new note to be played on this motor.
      * @param newNote The note to be added, which must not conflict with any notes already assigned to this motor.
      */
-    public void addNote(SimpleNote newNote) {
+    public void addNote(Note newNote) {
         notes.add(newNote);
         inUseTimes.add(new IntPair(newNote.startTime(), newNote.startTime() + newNote.duration()));
     }
@@ -116,7 +117,7 @@ public class Motor {
     }
 
     public void forceCombine(Motor other) {
-        ArrayList<SimpleNote> combined = new ArrayList<>();
+        ArrayList<Note> combined = new ArrayList<>();
         ArrayList<IntPair> newUsageTimes = new ArrayList<>();
 
         // Perform a merge sort on each motor's note lists
@@ -126,7 +127,7 @@ public class Motor {
         int index2 = 0;
         while (index1 < this.notes.size() || index2 < other.notes.size()) {
             // Get the next data to add to the combined list
-            SimpleNote nextNote;
+            Note nextNote;
             IntPair nextUsageTime;
             if (index1 == this.notes.size()) { // Reached end of list 1
                 nextNote = other.notes.get(index2);
@@ -152,7 +153,7 @@ public class Motor {
                 // Change the previously added data so that it doesn't conflict
                 var oldNote = combined.get(combined.size() - 1);
                 int newDuration = nextNote.startTime() - oldNote.startTime();
-                var newNote = new SimpleNote(oldNote.startTime(), oldNote.pitch(), newDuration, oldNote.voiceIndex());
+                var newNote = new Note(oldNote.startTime(), oldNote.pitch(), newDuration, oldNote.voiceIndex());
                 combined.remove(combined.size() - 1);
                 combined.add(newNote);
 

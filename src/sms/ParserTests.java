@@ -1,3 +1,5 @@
+package sms;
+
 import org.junit.Test;
 
 import javax.sound.midi.InvalidMidiDataException;
@@ -15,7 +17,7 @@ public class ParserTests {
 
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
-        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/tempochange_1part.mid"));
+        ArrayList<Note> notes = p.parseMidi(new File("testfiles/tempochange_1part.mid")).first();
         assertEquals(12, notes.size());
 
         assertEquals(0, notes.get(0).startTime());
@@ -50,7 +52,7 @@ public class ParserTests {
 
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
-        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/tempochange_2parts.mid"));
+        ArrayList<Note> notes = p.parseMidi(new File("testfiles/tempochange_2parts.mid")).first();
         assertEquals(24, notes.size());
 
         // Part 1 - Same as in the single part tempo change test
@@ -112,7 +114,7 @@ public class ParserTests {
 
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
-        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/tempochange_2parts_decimalTempo.mid"));
+        ArrayList<Note> notes = p.parseMidi(new File("testfiles/tempochange_2parts_decimalTempo.mid")).first();
         assertEquals(24, notes.size());
 
         // Part 1 - Same as in the single part tempo change test
@@ -174,7 +176,7 @@ public class ParserTests {
 
         // File has 12 notes, starting at 120bpm, switching to 60bpm after 4 notes
         // and then switching back to 120bpm after another 4 notes
-        ArrayList<SimpleNote> notes = p.parseMidi(new File("testfiles/multipleNotesAtOnce_1part.mid"));
+        ArrayList<Note> notes = p.parseMidi(new File("testfiles/multipleNotesAtOnce_1part.mid")).first();
         assertEquals(8, notes.size());
 
         assertEquals(0, notes.get(0).startTime());
@@ -194,5 +196,5 @@ public class ParserTests {
         assertEquals(150, notes.get(7).startTime());
         assertEquals(48, notes.get(7).duration());
     }
-
+    
 }
