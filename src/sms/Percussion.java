@@ -1,9 +1,17 @@
 package sms;
 
-
 import java.util.Comparator;
 
+/**
+ * Stores the data of a single percussion command from a MIDI file.
+ * @param startTime The time the percussion command should be played at, in
+ *                  hundredths of a second since the start of the song
+ * @param type The type of instrument this percussion command will play as
+ */
 public record Percussion(int startTime, Type type) implements MusicCommand {
+    /**
+     * All the possible MIDI percussion instruments
+     */
     public enum Type {
         ACOUSTIC_BASS_DRUM, BASS_DRUM, SIDE_STICK, ACOUSTIC_SNARE, HAND_CLAP,
         ELECTRIC_SNARE, LO_FLOOR_TOM, CLOSED_HI_HAT, HIGH_FLOOR_TOM, PEDAL_HI_HAT, LO_TOM, OPEN_HI_HAT, LO_MID_TOM,
@@ -13,6 +21,9 @@ public record Percussion(int startTime, Type type) implements MusicCommand {
         CLAVES, HI_WOOD_BLOCK, LO_WOOD_BLOCK, MUTE_CUICA, OPEN_CUICA, MUTE_TRIANGLE, OPEN_TRIANGLE
     }
 
+    /**
+     * Used to sort a list of percussion commands in chronological order
+     */
     public static final Comparator<Percussion> chronologicalOrder
             = Comparator.comparingInt(p -> p.startTime);
 
