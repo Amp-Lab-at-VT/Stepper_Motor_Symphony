@@ -1,10 +1,13 @@
+package sms;
+
 import javax.sound.midi.InvalidMidiDataException;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.List;
 
 public class CommandPrompt {
 
@@ -16,8 +19,9 @@ public class CommandPrompt {
 
     // Used for reading a MIDI file
     private final Parser parser;
+    private Pair<ArrayList<Note>, ArrayList<Percussion>> midiData;
 
-    private ArrayList<SimpleNote> notes;
+    private File inputFile;
 
     public CommandPrompt() {
         reader = new BufferedReader(new InputStreamReader(System.in));
@@ -31,12 +35,16 @@ public class CommandPrompt {
      * @throws IOException If the terminal cannot be read from
      */
     public void run() throws IOException {
-        Command currentCommand;
+        var currentCommand = new Command(CommandTypes.UNKNOWN, null);
         do {
             System.out.print(">>> ");
             String input = reader.readLine();
-            currentCommand = parseInput(input);
-            execute(currentCommand);
+
+            if (!input.isEmpty()) {
+                currentCommand = parseInput(input);
+                execute(currentCommand);
+            }
+
         } while (currentCommand.type() != CommandTypes.EXIT);
     }
 
@@ -95,7 +103,7 @@ public class CommandPrompt {
      * Tells the user that an unknown command was entered into the console
      */
     private void unknown() {
-        System.out.println("Unknown command");
+        System.err.println("Unknown command");
     }
 
     /**
@@ -104,25 +112,22 @@ public class CommandPrompt {
      *                argument will contain the name of the input file.
      */
     private void read(Command command) {
-        // "read" only takes 1 argument
-        String[] args = command.args();
-        if (args.length != 1) {
-            System.out.println("Usage: read <filename>");
+        // "read" only takes 1 argument, the filename
+        if (command.args.length != 1) {
+            System.err.println("Usage: read <filename>");
             return;
         }
 
-        // The filename is the first argument in the command
-        String filename = args[0];
+        inputFile = new File(command.args[0]);
 
-        // Create a new parser with the given filename
+        // Try to parse the file entered by the user
         try {
-            parser.readFile(filename);
-            notes = parser.parseMidi();
-            System.out.println("Successfully read file " + filename);
+            midiData = parser.parseMidi(inputFile);
+            System.out.println("Successfully read file " + inputFile);
         } catch (InvalidMidiDataException e) {
-            System.out.println("File " + filename + " contains invalid MIDI data.");
+            System.err.println("File " + inputFile + " contains invalid MIDI data.");
         } catch (IOException e) {
-            System.out.println("File " + filename + " could not be found.");
+            System.err.println("File " + inputFile + " could not be found.");
         }
     }
 
@@ -135,31 +140,25 @@ public class CommandPrompt {
     private void set(Command command) {
         String[] args = command.args();
         if (args.length != 2) {
-            System.out.println("Usage: update <variable> <value>");
+            System.err.println("Usage: update <variable> <value>");
             return;
         }
 
-        String varName = args[0];
-        String value = args[1];
+        String varName = args[0].toLowerCase();
+        String value = args[1].toLowerCase();
 
         switch (varName) {
-            case "preserveTracks":
-                String lowerCase = value.toLowerCase();
-                if (lowerCase.equals("true")) {
-                    // TODO: add this
-                    //parser.setPreserveTracks(true);
+            case "preservetracks", "p" -> {
+                if (value.equals("true")) {
+                    parser.setPreserveVoices(true);
+                } else if (value.equals("false")) {
+                    parser.setPreserveVoices(false);
+                } else {
+                    System.err.println("Unrecognized value");
+                    System.err.println("Required: true/false");
                 }
-                else if (lowerCase.equals("false")) {
-                    // TODO: add this
-                    //parser.setPreserveTracks(false);
-                }
-                else {
-                    System.out.println("Unrecognized value: " + value);
-                    System.out.println("Required: true/false");
-                }
-                break;
-            default:
-                System.out.println("Unrecognized variable name: " + varName);
+            }
+            default -> System.err.println("Unrecognized variable name: " + varName);
         }
     }
 
@@ -167,23 +166,22 @@ public class CommandPrompt {
      * Writes the currently read file's data into a .ino file that can be run by an ESP8266.
      */
     private void write() {
-        if (parser.getInputFileName() == null) {
-            System.out.println("An input file has not been read yet.");
+        if (inputFile == null) {
+            System.err.println("An input file has not been read yet.");
             return;
         }
 
-        // Create the output file name
-        String[] fileNameArray = parser.getInputFileName().split("\\.");
-        fileNameArray[fileNameArray.length - 1] = ".ino";
-        String outputFileName = String.join("", fileNameArray);
+        String outputFileName = inputFile.getName();
+        outputFileName = outputFileName.substring(0, outputFileName.lastIndexOf('.')) + ".ino";
 
         // Assign the notes to motors and write the output to a file
-        ArrayList<Motor> motors = assignNotes();
+        List<Motor> motors = assignNotes();
         try {
-            InoWriter writer = new InoWriter(motors, outputFileName);
+            InoWriter writer = new InoWriter(motors, midiData.second(), outputFileName);
             writer.run();
         } catch (IOException e) {
-            System.out.println("The file " + outputFileName + " could not be written to.");
+            System.err.println("The Arduino sketch file could not be written to.");
+            return;
         }
 
         System.out.println("Program requires " + motors.size() + " motors");
@@ -193,17 +191,22 @@ public class CommandPrompt {
      * Prints parameters that can be changed by the user to the console
      */
     private void parameters() {
-        System.out.println("Input File Name: " + parser.getInputFileName());
-
-        // TODO: fix these
-        //System.out.println("preserveTracks: " + parser.getPreserveTracks());
-        //System.out.println("tempo: " + Parser.getTempo());
+        System.out.println("Input File Name: " + inputFile);
+        System.out.println("preserveVoices: " + parser.getPreserveVoices());
     }
 
-    // TODO: Add functionality for preserving music tracks
-    private ArrayList<Motor> assignNotes() {
-        Collections.sort(notes);
-        return NoteAssigner.assign(notes);
+    /**
+     * This method entails assigning notes to motors
+     * @return List of Motor(s)
+     */
+    private List<Motor> assignNotes() {
+        if (parser.getPreserveVoices()) {
+            midiData.first().sort(Note.voiceOrder);
+            return NoteAssigner.assign(midiData.first());
+        } else {
+            midiData.first().sort(Note.chronologicalOrder);
+            return NoteAssigner.condensingAssign(midiData.first());
+        }
     }
 
     /**
